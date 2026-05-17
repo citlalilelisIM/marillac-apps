@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invasión Neón Pro</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #050505;
+            color: #0f0;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 3px solid #1a1a1a;
+            border-radius: 10px;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.1);
+        }
+
+        canvas {
+            display: block;
+            background: #000;
+        }
+
+        .ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            pointer-events: none;
+            font-size: 18px;
+            font-weight: bold;
+            color: #0ff;
+            text-shadow: 0 0 8px #0ff;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border: 2px solid #f0f;
+            border-radius: 20px;
+            box-shadow: 0 0 40px #f0f;
+        }
+
+        button {
+            background: #f0f;
+            color: #000;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: #fff;
+            box-shadow: 0 0 20px #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui">
+        PUNTOS: <span id="score">0</span> | VIDAS: <span id="lives">3</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="game-over">
+        <h1 style="color: #f0f; margin-bottom: 10px;">MISIÓN FALLIDA</h1>
+        <p style="color: #fff;">Puntos totales: <span id="final-score">0</span></p>
+        <button onclick="restartGame()">REINTENTAR</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const gameOverEl = document.getElementById('game-over');
+    const finalScoreEl = document.getElementById('final-score');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let score = 0;
+    let lives = 3;
+    let gameActive = true;
+    let keys = {};
+    let bullets = [];
+    let enemies = [];
+    let particles = [];
+    let frameCount = 0;
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // DIBUJO DE NAVE REALISTA
+    function drawPlayer(x, y) {
+        ctx.save();
+        ctx.translate(x + 20, y + 20);
+        
+        // Brillo del motor
+        const engineGlow = ctx.createRadialGradient(0, 20, 0, 0, 25, 15);
+        engineGlow.addColorStop(0, '#0ff');
+        engineGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = engineGlow;
+        ctx.fillRect(-10, 15, 20, 20);
+
+        // Alas
+        ctx.fillStyle = '#0a3d0a';
+        ctx.beginPath();
+        ctx.moveTo(-20, 15); ctx.lineTo(0, -15); ctx.lineTo(20, 15);
+        ctx.fill();
+
+        // Cuerpo central
+        const bodyGrad = ctx.createLinearGradient(-10, 0, 10, 0);
+        bodyGrad.addColorStop(0, '#004d00');
+        bodyGrad.addColorStop(0.5, '#0f0');
+        bodyGrad.addColorStop(1, '#004d00');
+        ctx.fillStyle = bodyGrad;
+        ctx.beginPath();
+        ctx.moveTo(-8, 15); ctx.lineTo(-5, -20); ctx.lineTo(5, -20); ctx.lineTo(8, 15);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cabina (Glass effect)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(0, -5, 4, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // DIBUJO DE ALIEN REALISTA (Tipo Medusa Espacial)
+    function drawAlien(x, y, color, time) {
+        ctx.save();
+        ctx.translate(x + 20, y + 20);
+        const float = Math.sin(time * 0.1) * 5;
+
+        // Aura
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+
+        // Cabeza
+        const headGrad = ctx.createRadialGradient(0, float, 0, 0, float, 15);
+        headGrad.addColorStop(0, '#fff');
+        headGrad.addColorStop(0.4, color);
+        headGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.arc(0, float, 15, 0, Math.PI, true);
+        ctx.fill();
+
+        // Tentáculos animados
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        for(let i = -10; i <= 10; i += 10) {
+            ctx.beginPath();
+            ctx.moveTo(i, float);
+            ctx.quadraticCurveTo(i + Math.sin(time*0.2)*5, float + 15, i, float + 25);
+            ctx.stroke();
+        }
+
+        // Ojos brillantes
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(-5, float-2, 3, 0, Math.PI*2);
+        ctx.arc(5, float-2, 3, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    function spawnEnemy() {
+        if (!gameActive) return;
+        enemies.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -50,
+            speed: 1.5 + (score / 500),
+            color: score > 1000 ? '#f0f' : '#f00',
+            time: Math.random() * 100
+        });
+    }
+
+    function createExplosion(x, y, color) {
+        for(let i=0; i<15; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                size: Math.random() * 3,
+                life: 1,
+                color
+            });
+        }
+    }
+
+    let playerPos = { x: canvas.width / 2 - 20, y: canvas.height - 70 };
+
+    function update() {
+        if (!gameActive) return;
+        frameCount++;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Estela de movimiento
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Estrellas de fondo
+        if(frameCount % 2 === 0) particles.push({x: Math.random()*canvas.width, y: 0, vx: 0, vy: 5, size: 1, life: 0.5, color: '#fff'});
+
+        // Movimiento
+        if ((keys['ArrowLeft'] || keys['KeyA']) && playerPos.x > 0) playerPos.x -= 7;
+        if ((keys['ArrowRight'] || keys['KeyD']) && playerPos.x < canvas.width - 40) playerPos.x += 7;
+        
+        if (keys['Space'] && frameCount % 10 === 0) {
+            bullets.push({ x: playerPos.x + 18, y: playerPos.y, w: 4, h: 20 });
+        }
+
+        // Dibujar Jugador
+        drawPlayer(playerPos.x, playerPos.y);
+
+        // Balas (Láseres neón)
+        bullets.forEach((b, i) => {
+            b.y -= 12;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#0ff';
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        // Enemigos
+        enemies.forEach((en, i) => {
+            en.y += en.speed;
+            en.time++;
+            drawAlien(en.x, en.y, en.color, en.time);
+
+            // Colisión bala
+            bullets.forEach((b, bi) => {
+                if (b.x < en.x + 35 && b.x + 4 > en.x && b.y < en.y + 35 && b.y + 20 > en.y) {
+                    createExplosion(en.x + 20, en.y + 20, en.color);
+                    enemies.splice(i, 1);
+                    bullets.splice(bi, 1);
+                    score += 20;
+                    scoreEl.innerText = score;
+                }
+            });
+
+            // Colisión jugador
+            if (en.x < playerPos.x + 35 && en.x + 35 > playerPos.x && en.y < playerPos.y + 35 && en.y + 35 > playerPos.y) {
+                enemies.splice(i, 1);
+                lives--;
+                livesEl.innerText = lives;
+                createExplosion(playerPos.x + 20, playerPos.y + 20, '#f00');
+                if (lives <= 0) {
+                    gameActive = false;
+                    finalScoreEl.innerText = score;
+                    gameOverEl.style.display = 'block';
+                }
+            }
+            if (en.y > canvas.height) enemies.splice(i, 1);
+        });
+
+        // Partículas/Explosiones
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.02;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+            if (p.life <= 0) particles.splice(i, 1);
+        });
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+
+        // Spawn dinámico
+        if (frameCount % Math.max(20, 60 - Math.floor(score/100)) === 0) spawnEnemy();
+
+        requestAnimationFrame(update);
+    }
+
+    function restartGame() {
+        score = 0; lives = 3; bullets = []; enemies = []; particles = [];
+        gameActive = true;
+        playerPos.x = canvas.width / 2 - 20;
+        scoreEl.innerText = score;
+        livesEl.innerText = lives;
+        gameOverEl.style.display = 'none';
+        update();
+    }
+
+    update();
+</script>
+</body>
+</html>

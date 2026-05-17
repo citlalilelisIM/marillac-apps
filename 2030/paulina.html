@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Narval Journal: Mis Pendientes</title>
+    <style>
+        :root {
+            --lila: #dcd6f7;
+            --rosa-claro: #f4eeff;
+            --acento: #a6b1e1;
+            --texto: #424874;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--rosa-claro);
+            color: var(--texto);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(166, 177, 225, 0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 { text-align: center; color: var(--acento); font-size: 1.8rem; }
+
+        /* Sección de Registro */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid var(--lila);
+            border-radius: 10px;
+            outline: none;
+            color: var(--texto);
+        }
+
+        button.add-btn {
+            background-color: var(--lila);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            color: var(--texto);
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        button.add-btn:hover { transform: scale(1.05); background-color: var(--acento); }
+
+        /* Lista de Pendientes */
+        ul { list-style: none; padding: 0; }
+        li {
+            background: var(--rosa-claro);
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .pending-text { flex: 1; margin-right: 10px; }
+        .completed { text-decoration: line-through; opacity: 0.6; }
+
+        .check-btn {
+            background: white;
+            border: 2px solid var(--lila);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        /* Sección del Narval Mascota */
+        .narwhal-pet-area {
+            margin-top: 30px;
+            text-align: center;
+            background: var(--lila);
+            padding: 15px;
+            border-radius: 15px;
+        }
+
+        #narwhalCanvas {
+            background-color: transparent;
+            cursor: pointer;
+        }
+
+        .feed-info { font-size: 0.8rem; margin-top: 5px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🦄 Narval Journal</h1>
+
+        <div class="input-group">
+            <input type="text" id="taskInput" placeholder="Escribe un pendiente...">
+            <button class="add-btn" onclick="agregarTarea()">Agregar</button>
+        </div>
+
+        <ul id="taskList"></ul>
+
+        <div class="narwhal-pet-area">
+            <div id="statusMsg">¡Escribe algo para alimentar al narval!</div>
+            <canvas id="narwhalCanvas" width="200" height="150"></canvas>
+            <div class="feed-info">Haz clic en el narval para verlo nadar</div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('narwhalCanvas');
+    const ctx = canvas.getContext('2d');
+    const taskInput = document.getElementById('taskInput');
+    const taskList = document.getElementById('taskList');
+    const statusMsg = document.getElementById('statusMsg');
+
+    let narwhalY = 80;
+    let angle = 0;
+    let isJumping = false;
+    let jumpOffset = 0;
+    let feedingParticles = [];
+
+    // Función para agregar tarea
+    function agregarTarea() {
+        const text = taskInput.value.trim();
+        if (text === "") return;
+
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <span class="pending-text">${text}</span>
+            <span class="narval-emoji" style="display:none; margin-right:10px;">🐳✨</span>
+            <button class="check-btn" onclick="completarTarea(this)">✓</button>
+        `;
+        taskList.appendChild(li);
+        
+        taskInput.value = "";
+        
+        // Alimentar al narval al crear pendiente
+        alimentarNarval();
+    }
+
+    function completarTarea(btn) {
+        const li = btn.parentElement;
+        const text = li.querySelector('.pending-text');
+        const emoji = li.querySelector('.narval-emoji');
+        
+        text.classList.toggle('completed');
+        
+        if (text.classList.contains('completed')) {
+            emoji.style.display = "inline";
+            iniciarSaltoCelebracion();
+            btn.style.backgroundColor = "#a6b1e1";
+        } else {
+            emoji.style.display = "none";
+            btn.style.backgroundColor = "white";
+        }
+    }
+
+    // Lógica del Narval Mascota
+    function alimentarNarval() {
+        statusMsg.innerText = "¡Mmm! ¡Qué rico pendiente! 🍩";
+        for(let i=0; i<10; i++) {
+            feedingParticles.push({
+                x: 100, y: 20,
+                vx: (Math.random() - 0.5) * 4,
+                vy: Math.random() * 3 + 2,
+                color: '#ffb7b2'
+            });
+        }
+        setTimeout(() => { statusMsg.innerText = "El narval está feliz"; }, 2000);
+    }
+
+    function iniciarSaltoCelebracion() {
+        isJumping = true;
+        let force = 10;
+        const jumpInterval = setInterval(() => {
+            jumpOffset = Math.sin(force) * 30;
+            force -= 0.2;
+            if (force <= 0) {
+                isJumping = false;
+                jumpOffset = 0;
+                clearInterval(jumpInterval);
+            }
+        }, 20);
+    }
+
+    function drawNarwhal() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Flotar suavemente
+        angle += 0.05;
+        let floatY = Math.sin(angle) * 5;
+
+        // Dibujar cuerpo simple de Narval
+        const x = 100;
+        const y = narwhalY + floatY - jumpOffset;
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Colmillo (cuerno)
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.moveTo(35, -5);
+        ctx.lineTo(60, -15);
+        ctx.lineTo(35, 5);
+        ctx.fill();
+
+        // Cuerpo
+        ctx.fillStyle = "#a6b1e1";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 40, 25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ojo
+        ctx.fillStyle = "#424874";
+        ctx.beginPath();
+        ctx.arc(20, -5, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mejilla rosada
+        ctx.fillStyle = "rgba(255, 182, 193, 0.7)";
+        ctx.beginPath();
+        ctx.arc(20, 5, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Aleta
+        ctx.beginPath();
+        ctx.ellipse(-10, 15, 10, 5, Math.PI/4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Partículas de comida
+        feedingParticles.forEach((p, index) => {
+            p.x += p.vx;
+            p.y += p.vy;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+            ctx.fill();
+            if (p.y > canvas.height) feedingParticles.splice(index, 1);
+        });
+
+        requestAnimationFrame(drawNarwhal);
+    }
+
+    drawNarwhal();
+
+    // Soporte para Enter
+    taskInput.addEventListener("keyup", function(event) {
+        if (event.key === "Enter") agregarTarea();
+    });
+</script>
+</body>
+</html>

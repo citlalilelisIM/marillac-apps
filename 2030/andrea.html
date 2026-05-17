@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repaso Escolar Retro</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #ffd1dc; /* Rosa Pastel */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        canvas {
+            border: 5px solid #ff99ad;
+            box-shadow: 10px 10px 0px #ffb7c5;
+            background-color: #fff0f5;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="appCanvas" width="600" height="500"></canvas>
+
+<script>
+    const canvas = document.getElementById('appCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- ESTADO GLOBAL ---
+    let screen = 'MENU'; // MENU, QUIZ, GAMEOVER
+    let currentTopic = '';
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let selectedThemeQuestions = [];
+
+    // --- BANCO DE PREGUNTAS ---
+    const bank = {
+        'Historia': [
+            { q: "¿En qué año se descubrió América?", a: ["1492", "1500", "1450", "1521"], c: 0 },
+            { q: "¿Civilización que construyó pirámides?", a: ["Griegos", "Egipto", "Romanos", "Fenicios"], c: 1 },
+            { q: "¿País de la Revolución Industrial?", a: ["Francia", "España", "Inglaterra", "Alemania"], c: 2 },
+            { q: "¿Primer presidente de México?", a: ["Juárez", "Guadalupe Victoria", "Madero", "Díaz"], c: 1 },
+            { q: "¿Qué guerra terminó en 1945?", a: ["1ra Mundial", "2da Mundial", "Guerra Civil", "Guerra Fría"], c: 1 },
+            // ... (Añadidas dinámicamente para demostración)
+        ],
+        'Ciencias': [
+            { q: "¿Símbolo del agua?", a: ["H2", "O2", "CO2", "H2O"], c: 3 },
+            { q: "¿Planeta rojo?", a: ["Venus", "Marte", "Júpiter", "Saturno"], c: 1 },
+            { q: "¿Centro del átomo?", a: ["Electrón", "Corteza", "Núcleo", "Orbital"], c: 2 },
+            { q: "¿Gas necesario para fotosíntesis?", a: ["Oxígeno", "Nitrógeno", "CO2", "Helio"], c: 2 },
+            { q: "¿Unidad básica de la vida?", a: ["Tejido", "Órgano", "Célula", "Bacteria"], c: 2 }
+        ]
+    };
+
+    // Rellenar hasta 20 preguntas genéricas para el ejemplo
+    ['Historia', 'Ciencias'].forEach(topic => {
+        while(bank[topic].length < 20) {
+            bank[topic].push({
+                q: `Pregunta extra de ${topic} #${bank[topic].length + 1}`,
+                a: ["Opción A", "Opción B", "Correcta", "Opción D"],
+                c: 2
+            });
+        }
+    });
+
+    // --- LÓGICA DE CLIC ---
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (screen === 'MENU') {
+            if (y > 200 && y < 260) startQuiz('Historia');
+            if (y > 280 && y < 340) startQuiz('Ciencias');
+        } 
+        else if (screen === 'QUIZ') {
+            for (let i = 0; i < 4; i++) {
+                if (y > 220 + i * 50 && y < 260 + i * 50) {
+                    checkAnswer(i);
+                    break;
+                }
+            }
+        } 
+        else if (screen === 'GAMEOVER') {
+            if (y > 350 && y < 410) {
+                screen = 'MENU';
+                score = 0;
+                currentQuestionIndex = 0;
+            }
+        }
+    });
+
+    function startQuiz(topic) {
+        currentTopic = topic;
+        selectedThemeQuestions = bank[topic];
+        screen = 'QUIZ';
+    }
+
+    function checkAnswer(index) {
+        if (index === selectedThemeQuestions[currentQuestionIndex].c) {
+            score += 10;
+        }
+        currentQuestionIndex++;
+        if (currentQuestionIndex >= 20) {
+            screen = 'GAMEOVER';
+        }
+    }
+
+    // --- RENDERIZADO ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Estilo de texto común
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        if (screen === 'MENU') {
+            drawHeader("ELIGE UN TEMA");
+            drawButton("HISTORIA", 230, "#ff85a2");
+            drawButton("CIENCIAS", 310, "#ff85a2");
+        } 
+        else if (screen === 'QUIZ') {
+            const q = selectedThemeQuestions[currentQuestionIndex];
+            
+            // Info superior
+            ctx.fillStyle = "#ff85a2";
+            ctx.font = "bold 16px Courier New";
+            ctx.fillText(`Tema: ${currentTopic} | Puntos: ${score}`, canvas.width/2, 30);
+            ctx.fillText(`Pregunta: ${currentQuestionIndex + 1}/20`, canvas.width/2, 60);
+
+            // Pregunta
+            ctx.fillStyle = "#333";
+            ctx.font = "bold 20px Courier New";
+            wrapText(q.q, canvas.width/2, 130, 500, 25);
+
+            // Opciones
+            q.a.forEach((txt, i) => {
+                drawButton(`${i+1}. ${txt}`, 240 + i * 50, "#f0f0f0", 18, 450);
+            });
+        } 
+        else if (screen === 'GAMEOVER') {
+            drawHeader("¡FIN DEL REPASO!");
+            ctx.fillStyle = "#333";
+            ctx.font = "24px Courier New";
+            ctx.fillText(`Puntaje Final: ${score} / 200`, canvas.width/2, 220);
+            
+            const mensaje = score > 150 ? "¡Excelente trabajo!" : "Sigue practicando.";
+            ctx.fillText(mensaje, canvas.width/2, 270);
+
+            drawButton("REINICIAR", 380, "#ff85a2");
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    // --- HELPERS VISUALES ---
+    function drawHeader(text) {
+        ctx.fillStyle = "#ff85a2";
+        ctx.font = "bold 32px Courier New";
+        ctx.fillText(text, canvas.width/2, 100);
+        ctx.fillRect(100, 130, 400, 4); // Línea decorativa
+    }
+
+    function drawButton(text, y, color, fontSize = 22, width = 300) {
+        const x = (canvas.width - width) / 2;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y - 20, width, 40);
+        ctx.strokeStyle = "#ff85a2";
+        ctx.strokeRect(x, y - 20, width, 40);
+        
+        ctx.fillStyle = color === "#ff85a2" ? "white" : "#333";
+        ctx.font = `bold ${fontSize}px Courier New`;
+        ctx.fillText(text, canvas.width/2, y);
+    }
+
+    function wrapText(text, x, y, maxWidth, lineHeight) {
+        let words = text.split(' ');
+        let line = '';
+        for(let n = 0; n < words.length; n++) {
+            let testLine = line + words[n] + ' ';
+            let metrics = ctx.measureText(testLine);
+            if (metrics.width > maxWidth && n > 0) {
+                ctx.fillText(line, x, y);
+                line = words[n] + ' ';
+                y += lineHeight;
+            } else {
+                line = testLine;
+            }
+        }
+        ctx.fillText(line, x, y);
+    }
+
+    draw();
+</script>
+
+</body>
+</html>

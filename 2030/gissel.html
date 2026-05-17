@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sinfonía del Vacío - Terror 360°</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #0088ff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #002244;
+            background: radial-gradient(circle, #000408 0%, #000 100%);
+        }
+
+        canvas { display: block; }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            pointer-events: none;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .glitch { color: #ff0044; text-shadow: 2px 2px #550000; font-size: 2rem; }
+
+        button {
+            background: transparent;
+            color: #0088ff;
+            border: 1px solid #0088ff;
+            padding: 12px 25px;
+            cursor: pointer;
+            margin-top: 30px;
+            font-family: inherit;
+            transition: 0.3s;
+        }
+
+        button:hover { background: #0088ff; color: #000; box-shadow: 0 0 15px #0088ff; }
+
+        #instructions { margin-top: 20px; color: #003366; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui">
+        <div>NIVEL DE SEÑAL: <span id="batt">100</span>%</div>
+        <div>RANGO: <span id="range">---</span></div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="overlay">
+        <h2 class="glitch">SEÑAL PERDIDA</h2>
+        <p>El ente te ha localizado.</p>
+        <button onclick="reiniciar()">RECONECTAR</button>
+    </div>
+</div>
+
+<div id="instructions">
+    [WASD / FLECHAS] Moverse en todas direcciones | [ESPACIO] Radar (Atrae al ente)
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let activo = true;
+    let bateria = 100;
+    let pulseRadius = 0;
+    const keys = {};
+
+    const jugador = { x: 400, y: 300, velocidad: 3.5 };
+    const ente = { x: 100, y: 100, velocidadBase: 0.7 };
+
+    window.onkeydown = e => keys[e.code] = true;
+    window.onkeyup = e => keys[e.code] = false;
+
+    function reiniciar() {
+        activo = true;
+        bateria = 100;
+        jugador.x = 400; jugador.y = 300;
+        // Aparece lejos del jugador
+        ente.x = Math.random() > 0.5 ? 50 : 750;
+        ente.y = Math.random() > 0.5 ? 50 : 550;
+        document.getElementById('overlay').style.display = 'none';
+        loop();
+    }
+
+    function loop() {
+        if (!activo) return;
+
+        // Movimiento 360° del Jugador
+        if ((keys['ArrowLeft'] || keys['KeyA']) && jugador.x > 10) jugador.x -= jugador.velocidad;
+        if ((keys['ArrowRight'] || keys['KeyD']) && jugador.x < canvas.width - 10) jugador.x += jugador.velocidad;
+        if ((keys['ArrowUp'] || keys['KeyW']) && jugador.y > 10) jugador.y -= jugador.velocidad;
+        if ((keys['ArrowDown'] || keys['KeyS']) && jugador.y < canvas.height - 10) jugador.y += jugador.velocidad;
+
+        // Lógica de Persecución del Ente
+        const dx = jugador.x - ente.x;
+        const dy = jugador.y - ente.y;
+        const dist = Math.hypot(dx, dy);
+        const angulo = Math.atan2(dy, dx);
+
+        // Si usas el radar, el ente corre hacia ti. Si no, camina lento.
+        let velEnte = keys['Space'] ? 3.0 : 0.8;
+        ente.x += Math.cos(angulo) * velEnte;
+        ente.y += Math.sin(angulo) * velEnte;
+
+        // Radar y Energía
+        if (keys['Space'] && bateria > 0) {
+            bateria -= 0.3;
+            pulseRadius += 15;
+            if (pulseRadius > 600) pulseRadius = 0;
+            document.getElementById('range').innerText = Math.floor(dist) + "m";
+        } else {
+            pulseRadius = 0;
+            document.getElementById('range').innerText = "---";
+        }
+
+        document.getElementById('batt').innerText = Math.floor(bateria);
+
+        // Colisión
+        if (dist < 15) {
+            activo = false;
+            document.getElementById('overlay').style.display = 'flex';
+        }
+
+        dibujar(dist);
+        requestAnimationFrame(loop);
+    }
+
+    function dibujar(distanciaAlEnte) {
+        // Limpiar con negro puro
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar el Radar
+        if (keys['Space'] && bateria > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(0, 136, 255, ${1 - pulseRadius/600})`;
+            ctx.lineWidth = 3;
+            ctx.arc(jugador.x, jugador.y, pulseRadius, 0, Math.PI*2);
+            ctx.stroke();
+
+            // Iluminar al Ente si el pulso lo toca
+            if (Math.abs(distanciaAlEnte - pulseRadius) < 40) {
+                const alpha = 1 - (pulseRadius/600);
+                ctx.fillStyle = `rgba(255, 0, 68, ${alpha})`;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#ff0044";
+                ctx.beginPath();
+                ctx.arc(ente.x, ente.y, 6, 0, Math.PI*2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // Jugador (Pequeño indicador azul muy tenue)
+        ctx.fillStyle = '#003366';
+        ctx.beginPath();
+        ctx.arc(jugador.x, jugador.y, 3, 0, Math.PI*2);
+        ctx.fill();
+
+        // Efecto de oscuridad en los bordes (viñeta)
+        const grad = ctx.createRadialGradient(jugador.x, jugador.y, 0, jugador.x, jugador.y, 150);
+        grad.addColorStop(0, 'rgba(0, 136, 255, 0.05)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    loop();
+</script>
+</body>
+</html>

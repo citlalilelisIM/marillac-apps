@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snoopy: El Barón Rojo - Modo Difícil</title>
+    <style>
+        :root {
+            --sky-blue: #a2d2ff;
+            --snoopy-red: #ff4d4d;
+            --woodstock-yellow: #fdfd96;
+            --bomb-black: #2d3436;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 6px solid #ecf0f1;
+            border-radius: 15px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #74b9ff, #a2d2ff);
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 25px;
+            box-sizing: border-box;
+            pointer-events: none;
+            color: #2d3436;
+            font-weight: bold;
+            font-size: 22px;
+            text-shadow: 1px 1px white;
+        }
+
+        #level-up {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #d63031;
+            font-size: 40px;
+            display: none;
+            font-weight: 900;
+            text-shadow: 2px 2px white;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            border: 5px solid var(--snoopy-red);
+            z-index: 100;
+        }
+
+        button {
+            background: var(--snoopy-red);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-family: inherit;
+            cursor: pointer;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui-layer">
+        <div>Distancia: <span id="score">0</span>m | Nivel: <span id="level">1</span></div>
+        <div id="lives-display"></div>
+    </div>
+
+    <div id="level-up">¡MÁS DIFICULTAD!</div>
+
+    <div id="game-over">
+        <h1 style="color: var(--snoopy-red); margin-top:0;">¡DERRIBADO!</h1>
+        <p>Puntaje final: <span id="final-score">0</span> m</p>
+        <button onclick="resetGame()">Reintentar Vuelo</button>
+    </div>
+
+    <canvas id="skyCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('skyCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const levelEl = document.getElementById('level');
+    const finalScoreEl = document.getElementById('final-score');
+    const gameOverEl = document.getElementById('game-over');
+    const levelUpEl = document.getElementById('level-up');
+    const livesDisplay = document.getElementById('lives-display');
+
+    canvas.width = 800;
+    canvas.height = 500;
+
+    let score = 0;
+    let level = 1;
+    let lives = 3;
+    let gameActive = true;
+    let frame = 0;
+    let keys = {};
+
+    const snoopy = { x: 100, y: 250, w: 60, h: 50, speed: 6 };
+    let enemies = [];
+    let bombs = [];
+    let woodstocks = [];
+    let clouds = [];
+
+    for(let i=0; i<6; i++) {
+        clouds.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, w: 120, speed: 0.5 + Math.random() });
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function updateLives() {
+        livesDisplay.innerHTML = '🐤'.repeat(lives);
+    }
+
+    function spawnEnemy() {
+        enemies.push({
+            x: canvas.width + 50,
+            y: Math.random() * (canvas.height - 50),
+            w: 55,
+            h: 35,
+            speed: 4 + (level * 0.8),
+            hasDroppedBomb: false
+        });
+    }
+
+    function drawSnoopy() {
+        ctx.fillStyle = '#ff4d4d'; // Caseta
+        ctx.fillRect(snoopy.x, snoopy.y + 20, snoopy.w, 20);
+        ctx.beginPath();
+        ctx.moveTo(snoopy.x - 5, snoopy.y + 20);
+        ctx.lineTo(snoopy.x + snoopy.w/2, snoopy.y - 5);
+        ctx.lineTo(snoopy.x + snoopy.w + 5, snoopy.y + 20);
+        ctx.fill();
+        
+        ctx.fillStyle = 'white'; // Snoopy
+        ctx.beginPath();
+        ctx.arc(snoopy.x + snoopy.w/2, snoopy.y + 5, 12, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = 'black'; // Bufanda
+        ctx.fillRect(snoopy.x + 5, snoopy.y + 10, 15, 4);
+    }
+
+    function update() {
+        if (!gameActive) return;
+        frame++;
+        score += 1;
+        
+        // Aumentar dificultad
+        if (score % 1000 === 0) {
+            level++;
+            levelEl.innerText = level;
+            levelUpEl.style.display = 'block';
+            setTimeout(() => levelUpEl.style.display = 'none', 1000);
+        }
+
+        scoreEl.innerText = Math.floor(score/10);
+
+        if ((keys['KeyW'] || keys['ArrowUp']) && snoopy.y > 0) snoopy.y -= snoopy.speed;
+        if ((keys['KeyS'] || keys['ArrowDown']) && snoopy.y < canvas.height - snoopy.h) snoopy.y += snoopy.speed;
+        if ((keys['KeyA'] || keys['ArrowLeft']) && snoopy.x > 0) snoopy.x -= snoopy.speed;
+        if ((keys['KeyD'] || keys['ArrowRight']) && snoopy.x < canvas.width - snoopy.w) snoopy.x += snoopy.speed;
+
+        // Enemigos y Bombas
+        if (frame % Math.max(20, 80 - (level*5)) === 0) spawnEnemy();
+
+        enemies.forEach((en, i) => {
+            en.x -= en.speed;
+            
+            // Lógica de bombas: tiran bomba cuando están cerca de Snoopy en el eje X
+            if (!en.hasDroppedBomb && en.x < snoopy.x + 200 && en.x > snoopy.x) {
+                bombs.push({ x: en.x + 20, y: en.y + 30, r: 8, speedY: 3 + level });
+                en.hasDroppedBomb = true;
+            }
+
+            if (snoopy.x < en.x + en.w && snoopy.x + snoopy.w > en.x &&
+                snoopy.y < en.y + en.h && snoopy.y + snoopy.h > en.y) {
+                enemies.splice(i, 1);
+                hit();
+            }
+            if (en.x + en.w < 0) enemies.splice(i, 1);
+        });
+
+        bombs.forEach((b, i) => {
+            b.y += b.speedY;
+            // Colisión con bomba
+            let dx = snoopy.x + snoopy.w/2 - b.x;
+            let dy = snoopy.y + snoopy.h/2 - b.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < b.r + 20) {
+                bombs.splice(i, 1);
+                hit();
+            }
+            if (b.y > canvas.height) bombs.splice(i, 1);
+        });
+
+        // Woodstock
+        if (frame % 500 === 0) {
+            woodstocks.push({ x: canvas.width + 50, y: Math.random()*400, w: 25, h: 25 });
+        }
+        woodstocks.forEach((w, i) => {
+            w.x -= 3;
+            if (snoopy.x < w.x + w.w && snoopy.x + snoopy.w > w.x &&
+                snoopy.y < w.y + w.h && snoopy.y + snoopy.h > w.y) {
+                woodstocks.splice(i, 1);
+                if (lives < 5) lives++;
+                updateLives();
+            }
+        });
+    }
+
+    function hit() {
+        lives--;
+        updateLives();
+        canvas.style.backgroundColor = '#fab1a0';
+        setTimeout(() => canvas.style.backgroundColor = '#a2d2ff', 100);
+        if (lives <= 0) endGame();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        clouds.forEach(c => {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 25, 0, Math.PI*2);
+            ctx.arc(c.x+30, c.y-10, 30, 0, Math.PI*2);
+            ctx.arc(c.x+60, c.y, 25, 0, Math.PI*2);
+            ctx.fill();
+            c.x -= c.speed;
+            if (c.x < -100) c.x = canvas.width + 100;
+        });
+
+        enemies.forEach(en => {
+            ctx.fillStyle = '#636e72';
+            ctx.fillRect(en.x, en.y + 10, en.w, 15);
+            ctx.fillStyle = '#2d3436';
+            ctx.fillRect(en.x + 20, en.y, 10, 35);
+        });
+
+        bombs.forEach(b => {
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+            ctx.fill();
+            // Mecha de la bomba
+            ctx.strokeStyle = 'orange';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(b.x, b.y - b.r);
+            ctx.lineTo(b.x, b.y - b.r - 5);
+            ctx.stroke();
+        });
+
+        woodstocks.forEach(w => {
+            ctx.font = '24px serif';
+            ctx.fillText('🐤', w.x, w.y + 20);
+        });
+
+        drawSnoopy();
+    }
+
+    function loop() {
+        update();
+        draw();
+        if (gameActive) requestAnimationFrame(loop);
+    }
+
+    function endGame() {
+        gameActive = false;
+        finalScoreEl.innerText = Math.floor(score/10);
+        gameOverEl.style.display = 'block';
+    }
+
+    function resetGame() {
+        score = 0; level = 1; lives = 3;
+        enemies = []; bombs = []; woodstocks = [];
+        gameActive = true;
+        gameOverEl.style.display = 'none';
+        updateLives();
+        loop();
+    }
+
+    updateLives();
+    loop();
+</script>
+</body>
+</html>

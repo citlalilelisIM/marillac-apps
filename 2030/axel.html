@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Defensa de Cartas: El Bucle Corrupto</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Previene scroll en móviles */
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* Estilos para fuentes personalizadas si se desean cargar, aquí usaremos las del sistema para evitar dependencias externas */
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Ajustar el canvas a la pantalla
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- VARIABLES DE ESTADO DEL JUEGO ---
+    let state = 'START'; // START, PLAYING, ENEMY_TURN, WAVE_CLEAR, GAME_OVER
+    let wave = 1;
+    let playerCards = [];
+    let enemies = [];
+    let selectedCardIndex = -1;
+    let floatingTexts = [];
+    let rewardCard = null;
+
+    const suits = ['♥', '♦', '♣', '♠'];
+    const numbers = ['2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const faces = ['J', 'Q', 'K'];
+
+    // --- CLASES Y GENERACIÓN ---
+
+    class FloatingText {
+        constructor(x, y, text, color) {
+            this.x = x;
+            this.y = y;
+            this.text = text;
+            this.color = color;
+            this.life = 60; // frames
+            this.maxLife = 60;
+        }
+        update() {
+            this.y -= 1;
+            this.life--;
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.globalAlpha = this.life / this.maxLife;
+            ctx.fillStyle = this.color;
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            // Borde del texto
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            ctx.strokeText(this.text, this.x, this.y);
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    function generateCard(isReward = false) {
+        let card = {
+            suit: suits[Math.floor(Math.random() * suits.length)],
+            isSpecial: false,
+            paralyze: false
+        };
+
+        // Si es recompensa, 50% de probabilidad de ser especial
+        if (isReward && Math.random() < 0.5) {
+            card.isSpecial = true;
+            if (Math.random() < 0.5) {
+                card.rank = '★';
+                card.name = 'Combo Mágico';
+                card.hp = 150;
+                card.maxHp = 150;
+                card.abilityDesc = 'Explosión + Golpe + Disparo';
+            } else {
+                card.rank = '❄';
+                card.name = 'Hielo';
+                card.hp = 120;
+                card.maxHp = 120;
+                card.paralyze = true;
+                card.abilityDesc = 'Paraliza al enemigo';
+            }
+            return card;
+        }
+
+        // Generación normal
+        const rand = Math.random();
+        if (rand < 0.1) {
+            card.rank = 'A';
+            card.hp = 100;
+            card.maxHp = 100;
+            card.abilityDesc = 'Explosión Kamikaze (Área)';
+        } else if (rand < 0.8) {
+            card.rank = numbers[Math.floor(Math.random() * numbers.length)];
+            card.hp = 120;
+            card.maxHp = 120;
+            const attacks = ['Golpe', 'Cuchillada', 'Disparo'];
+            card.abilityDesc = attacks[Math.floor(Math.random() * attacks.length)] + ' (50 dmg)';
+        } else {
+            card.rank = faces[Math.floor(Math.random() * faces.length)];
+            card.hp = 180;
+            card.maxHp = 180;
+            card.abilityDesc = 'Insta-Kill';
+        }
+        return card;
+    }
+
+    function spawnEnemies(count) {
+        enemies = [];
+        for (let i = 0; i < count; i++) {
+            enemies.push({
+                hp: 100, // Los números quitan 50, por lo que requieren 2 golpes
+                maxHp: 100,
+                damage: 20 + (wave * 5),
+                isParalyzed: false
+            });
+        }
+    }
+
+    function initGame() {
+        wave = 1;
+        playerCards = [];
+        for (let i = 0; i < 5; i++) {
+            playerCards.push(generateCard());
+        }
+        spawnEnemies(3);
+        state = 'PLAYING';
+        selectedCardIndex = -1;
+    }
+
+    function nextWave() {
+        wave++;
+        playerCards.push(rewardCard);
+        rewardCard = null;
+        spawnEnemies(2 + wave); // Más enemigos cada oleada
+        state = 'PLAYING';
+    }
+
+    // --- LÓGICA DE COMBATE ---
+
+    function executePlayerAttack(enemyIndex) {
+        const card = playerCards[selectedCardIndex];
+        const targetEnemy = enemies[enemyIndex];
+        
+        // Coordenadas para textos
+        const ex = getEnemyRect(enemyIndex).x + getEnemyRect(enemyIndex).w / 2;
+        const ey = getEnemyRect(enemyIndex).y + 20;
+
+        if (card.rank === 'A') {
+            // Explosión en área
+            enemies.forEach((e, i) => {
+                e.hp -= 100;
+                let textX = getEnemyRect(i).x + getEnemyRect(i).w / 2;
+                floatingTexts.push(new FloatingText(textX, ey, '¡KABOOM! -100', '#ff4444'));
+            });
+            card.hp = 0; // Se elimina a sí misma
+        } 
+        else if (faces.includes(card.rank)) {
+            // Instakill
+            targetEnemy.hp -= 1000;
+            floatingTexts.push(new FloatingText(ex, ey, '¡INSTA-KILL!', '#a855f7'));
+        } 
+        else if (card.isSpecial) {
+            if (card.paralyze) {
+                targetEnemy.hp -= 30;
+                targetEnemy.isParalyzed = true;
+                floatingTexts.push(new FloatingText(ex, ey, '¡CONGELADO! -30', '#3b82f6'));
+            } else {
+                // Combo Mágico (Explota a todos + golpea a target + dispara a target)
+                enemies.forEach((e, i) => {
+                    e.hp -= 50; // Explosión área
+                    let textX = getEnemyRect(i).x + getEnemyRect(i).w / 2;
+                    floatingTexts.push(new FloatingText(textX, ey - 20, 'Explosión -50', '#f59e0b'));
+                });
+                targetEnemy.hp -= 100; // Golpe + Disparo adicional al target
+                floatingTexts.push(new FloatingText(ex, ey, 'Golpe+Tiro -100', '#ef4444'));
+            }
+        } 
+        else {
+            // Números normales (necesitan 2 movimientos para 100hp -> 50 de daño)
+            targetEnemy.hp -= 50;
+            floatingTexts.push(new FloatingText(ex, ey, '-50', '#ffffff'));
+        }
+
+        selectedCardIndex = -1;
+        checkDeathsAndTurn();
+    }
+
+    function checkDeathsAndTurn() {
+        // Limpiar muertos
+        enemies = enemies.filter(e => e.hp > 0);
+        playerCards = playerCards.filter(c => c.hp > 0);
+
+        if (playerCards.length === 0) {
+            state = 'GAME_OVER';
+            return;
+        }
+
+        if (enemies.length === 0) {
+            state = 'WAVE_CLEAR';
+            rewardCard = generateCard(true); // Generar recompensa (50% especial)
+            return;
+        }
+
+        // Si el juego sigue, turno del enemigo
+        state = 'ENEMY_TURN';
+        setTimeout(enemyTurn, 1000); // Pequeña pausa para ver el resultado
+    }
+
+    function enemyTurn() {
+        if (state !== 'ENEMY_TURN') return;
+
+        enemies.forEach((enemy, i) => {
+            if (enemy.isParalyzed) {
+                enemy.isParalyzed = false; // Se le quita la parálisis para el sig turno
+                let ex = getEnemyRect(i).x + getEnemyRect(i).w / 2;
+                let ey = getEnemyRect(i).y + 20;
+                floatingTexts.push(new FloatingText(ex, ey, 'Paralizado', '#94a3b8'));
+                return;
+            }
+
+            // Ataca a una carta al azar
+            if (playerCards.length > 0) {
+                const targetIdx = Math.floor(Math.random() * playerCards.length);
+                playerCards[targetIdx].hp -= enemy.damage;
+                
+                const cx = getPlayerCardRect(targetIdx).x + getPlayerCardRect(targetIdx).w / 2;
+                const cy = getPlayerCardRect(targetIdx).y - 20;
+                floatingTexts.push(new FloatingText(cx, cy, `-${enemy.damage}`, '#ff0000'));
+            }
+        });
+
+        // Limpiar cartas muertas del jugador después del ataque
+        playerCards = playerCards.filter(c => c.hp > 0);
+
+        if (playerCards.length === 0) {
+            state = 'GAME_OVER';
+        } else {
+            state = 'PLAYING';
+        }
+    }
+
+    // --- DIBUJO E INTERFAZ ---
+
+    // Funciones de layout
+    const cardW = 90;
+    const cardH = 140;
+
+    function getPlayerCardRect(index) {
+        const totalW = playerCards.length * (cardW + 10) - 10;
+        let startX = (canvas.width - totalW) / 2;
+        // Si no caben en pantalla, se solapan un poco
+        if (totalW > canvas.width - 20) {
+            const step = (canvas.width - cardW - 40) / (playerCards.length - 1);
+            return { x: 20 + index * step, y: canvas.height - cardH - 30, w: cardW, h: cardH };
+        }
+        return { x: startX + index * (cardW + 10), y: canvas.height - cardH - 30, w: cardW, h: cardH };
+    }
+
+    function getEnemyRect(index) {
+        const totalW = enemies.length * (cardW + 10) - 10;
+        let startX = (canvas.width - totalW) / 2;
+        
+        if (totalW > canvas.width - 20) {
+            const step = (canvas.width - cardW - 40) / (enemies.length - 1);
+            return { x: 20 + index * step, y: 80, w: cardW, h: cardH };
+        }
+        return { x: startX + index * (cardW + 10), y: 80, w: cardW, h: cardH };
+    }
+
+    function drawRoundedRect(ctx, x, y, w, h, radius, fill, stroke) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+    }
+
+    function drawPlayerCard(card, rect, isSelected) {
+        const color = (card.suit === '♥' || card.suit === '♦') ? '#ef4444' : '#1e293b';
+        
+        // Sombra / Selección
+        if (isSelected) {
+            ctx.shadowColor = '#fde047';
+            ctx.shadowBlur = 15;
+            rect.y -= 15; // Elevar carta
+        }
+        
+        drawRoundedRect(ctx, rect.x, rect.y, rect.w, rect.h, 8, '#ffffff', isSelected ? '#fde047' : '#94a3b8');
+        ctx.shadowBlur = 0; // Reset shadow
+
+        // Rango y Palo
+        ctx.fillStyle = card.isSpecial ? '#a855f7' : color;
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(card.rank, rect.x + 8, rect.y + 28);
+        ctx.font = '20px Arial';
+        ctx.fillText(card.suit || '', rect.x + 8, rect.y + 50);
+
+        // Habilidad (Pequeña abajo)
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        
+        // Ajuste de texto largo
+        let words = card.abilityDesc.split(' ');
+        let line = '';
+        let lineY = rect.y + 90;
+        for(let n = 0; n < words.length; n++) {
+            let testLine = line + words[n] + ' ';
+            let metrics = ctx.measureText(testLine);
+            if (metrics.width > rect.w - 10 && n > 0) {
+                ctx.fillText(line, rect.x + rect.w/2, lineY);
+                line = words[n] + ' ';
+                lineY += 12;
+            } else {
+                line = testLine;
+            }
+        }
+        ctx.fillText(line, rect.x + rect.w/2, lineY);
+
+        // Barra de HP
+        ctx.fillStyle = '#f87171';
+        ctx.fillRect(rect.x + 5, rect.y + rect.h - 15, rect.w - 10, 10);
+        ctx.fillStyle = '#22c55e';
+        const hpPercent = Math.max(0, card.hp / card.maxHp);
+        ctx.fillRect(rect.x + 5, rect.y + rect.h - 15, (rect.w - 10) * hpPercent, 10);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '9px Arial';
+        ctx.fillText(`${card.hp}/${card.maxHp}`, rect.x + rect.w/2, rect.y + rect.h - 6);
+    }
+
+    function drawEnemyCard(enemy, rect) {
+        // Fondo corrupto
+        drawRoundedRect(ctx, rect.x, rect.y, rect.w, rect.h, 8, '#2d1b3d', '#8b5cf6');
+        
+        // Estilo corrupto/glitchy
+        ctx.fillStyle = '#22c55e';
+        ctx.font = 'bold 16px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('CORRUPTO', rect.x + rect.w/2, rect.y + 40);
+        
+        ctx.font = '24px Arial';
+        ctx.fillText('👾', rect.x + rect.w/2, rect.y + 70);
+
+        if (enemy.isParalyzed) {
+            ctx.fillStyle = '#3b82f6';
+            ctx.font = '12px Arial';
+            ctx.fillText('❄ Congelado ❄', rect.x + rect.w/2, rect.y + 100);
+        }
+
+        // Barra de HP
+        ctx.fillStyle = '#991b1b';
+        ctx.fillRect(rect.x + 5, rect.y + rect.h - 15, rect.w - 10, 10);
+        ctx.fillStyle = '#ef4444';
+        const hpPercent = Math.max(0, enemy.hp / enemy.maxHp);
+        ctx.fillRect(rect.x + 5, rect.y + rect.h - 15, (rect.w - 10) * hpPercent, 10);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '9px Arial';
+        ctx.fillText(`${enemy.hp}/${enemy.maxHp}`, rect.x + rect.w/2, rect.y + rect.h - 6);
+    }
+
+    function draw() {
+        // Fondo verde oscuro (mesa de cartas)
+        ctx.fillStyle = '#064e3b';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Header
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Oleada: ${wave}`, canvas.width / 2, 30);
+
+        if (state === 'START') {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 30px Arial';
+            ctx.fillText('DEFENSA DE CARTAS', canvas.width/2, canvas.height/2 - 40);
+            ctx.font = '16px Arial';
+            ctx.fillText('Haz clic/Toca para empezar', canvas.width/2, canvas.height/2);
+            ctx.fillText('Cartas de figuras hacen Insta-Kill.', canvas.width/2, canvas.height/2 + 40);
+            ctx.fillText('Cartas numéricas requieren 2 golpes (hacen 50 daño).', canvas.width/2, canvas.height/2 + 65);
+            ctx.fillText('El As explota eliminando en área.', canvas.width/2, canvas.height/2 + 90);
+        }
+        else if (state === 'PLAYING' || state === 'ENEMY_TURN') {
+            // Dibujar enemigos
+            enemies.forEach((enemy, i) => drawEnemyCard(enemy, getEnemyRect(i)));
+
+            // Info de turno
+            ctx.fillStyle = state === 'PLAYING' ? '#fde047' : '#ef4444';
+            ctx.font = '20px Arial';
+            ctx.fillText(state === 'PLAYING' ? 'Tu Turno: Selecciona tu carta, luego al enemigo' : 'Turno del Enemigo...', canvas.width/2, canvas.height / 2);
+
+            // Dibujar cartas del jugador
+            playerCards.forEach((card, i) => drawPlayerCard(card, getPlayerCardRect(i), i === selectedCardIndex));
+        }
+        else if (state === 'WAVE_CLEAR') {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = '#4ade80';
+            ctx.font = 'bold 36px Arial';
+            ctx.fillText('¡OLEADA SUPERADA!', canvas.width/2, canvas.height/2 - 100);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '20px Arial';
+            ctx.fillText('Nueva carta obtenida:', canvas.width/2, canvas.height/2 - 40);
+            
+            // Dibujar carta recompensa en el centro
+            if (rewardCard) {
+                drawPlayerCard(rewardCard, {x: canvas.width/2 - cardW/2, y: canvas.height/2 - 10, w: cardW, h: cardH}, false);
+            }
+
+            ctx.fillStyle = '#fde047';
+            ctx.fillText('Toca para continuar', canvas.width/2, canvas.height/2 + 160);
+        }
+        else if (state === 'GAME_OVER') {
+            ctx.fillStyle = 'rgba(0,0,0,0.9)';
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText('FIN DEL JUEGO', canvas.width/2, canvas.height/2 - 20);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Sobreviviste hasta la oleada ${wave}`, canvas.width/2, canvas.height/2 + 20);
+            ctx.fillText('Toca para reiniciar', canvas.width/2, canvas.height/2 + 60);
+        }
+
+        // Dibujar textos flotantes (daño, efectos)
+        for (let i = floatingTexts.length - 1; i >= 0; i--) {
+            floatingTexts[i].update();
+            floatingTexts[i].draw(ctx);
+            if (floatingTexts[i].life <= 0) {
+                floatingTexts.splice(i, 1);
+            }
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    // --- CONTROLES (Eventos unificados para Mouse y Touch) ---
+
+    function handleInput(x, y) {
+        if (state === 'START') {
+            initGame();
+        } 
+        else if (state === 'GAME_OVER') {
+            initGame();
+        } 
+        else if (state === 'WAVE_CLEAR') {
+            nextWave();
+        } 
+        else if (state === 'PLAYING') {
+            // 1. Revisar si tocó una carta propia
+            let clickedPlayerCard = -1;
+            // Recorrer en reversa para detectar primero las que se dibujan encima (por el solapamiento)
+            for (let i = playerCards.length - 1; i >= 0; i--) {
+                let rect = getPlayerCardRect(i);
+                if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+                    clickedPlayerCard = i;
+                    break;
+                }
+            }
+
+            if (clickedPlayerCard !== -1) {
+                selectedCardIndex = clickedPlayerCard;
+                
+                // Si es un As, el efecto es en área, no necesita target (lo aplicamos automáticamente)
+                if (playerCards[selectedCardIndex].rank === 'A') {
+                    // Esperar un toque más o aplicarlo directo. Hagámoslo que deba tocar a CUALQUIER enemigo para confirmarlo,
+                    // mantengamos la lógica estándar de requerir un target para evitar accidentes.
+                }
+                return;
+            }
+
+            // 2. Revisar si tocó un enemigo y hay carta seleccionada
+            if (selectedCardIndex !== -1) {
+                for (let i = 0; i < enemies.length; i++) {
+                    let rect = getEnemyRect(i);
+                    if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+                        executePlayerAttack(i);
+                        return;
+                    }
+                }
+                // Si hizo clic fuera, deseleccionar
+                selectedCardIndex = -1;
+            }
+        }
+    }
+
+    window.addEventListener('pointerdown', (e) => {
+        handleInput(e.clientX, e.clientY);
+    });
+
+    // Iniciar loop de dibujo
+    requestAnimationFrame(draw);
+
+</script>
+</body>
+</html>

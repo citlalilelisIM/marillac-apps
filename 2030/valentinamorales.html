@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Armario Estilo "Ni Idea"</title>
+    <style>
+        :root {
+            --rosa-neon: #ff69b4;
+            --amarillo-retro: #f1c40f;
+            --madera: #4a2f1b;
+            --vidrio: rgba(255, 255, 255, 0.2);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* Fondo de habitación borrosa */
+        .background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('https://images.unsplash.com/photo-1540518614846-7eded433c457?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80') center/cover;
+            filter: blur(8px) brightness(0.7);
+            z-index: -1;
+            transform: scale(1.1);
+        }
+
+        .contenedor-principal {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        h1 {
+            color: white;
+            text-shadow: 3px 3px var(--rosa-neon);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: var(--vidrio);
+            padding: 10px 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Estilo del Armario */
+        .armario {
+            background: var(--madera);
+            padding: 20px;
+            border: 15px solid #3d2615;
+            border-radius: 10px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .seccion {
+            background: #222;
+            height: 130px;
+            border: 3px inset #555;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            position: relative;
+        }
+
+        .canvas-container {
+            width: 110px;
+            height: 110px;
+            background: white;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .controles {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 140px;
+        }
+
+        /* Botones */
+        button {
+            cursor: pointer;
+            border: none;
+            padding: 8px;
+            font-family: inherit;
+            font-weight: bold;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn-cambiar { background: var(--amarillo-retro); color: black; }
+        .btn-cambiar:hover { transform: scale(1.05); }
+
+        .btn-fijar { background: #555; color: white; }
+        .btn-fijar.active { background: var(--rosa-neon); box-shadow: 0 0 10px var(--rosa-neon); }
+
+        .btn-principal {
+            margin-top: 20px;
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background: var(--rosa-neon);
+            color: white;
+            border-radius: 50px;
+            box-shadow: 0 5px #c71585;
+        }
+
+        .btn-principal:active { transform: translateY(4px); box-shadow: 0 0 #c71585; }
+
+        .upload-area {
+            margin-top: 15px;
+            background: var(--vidrio);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            color: white;
+            text-align: center;
+        }
+
+        #input-foto { display: none; }
+        select { padding: 5px; margin-bottom: 10px; }
+
+        .label-seccion {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--rosa-neon);
+            font-size: 0.7rem;
+            padding: 2px 5px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="background"></div>
+
+    <div class="contenedor-principal">
+        <h1>OUTFIT PICKER</h1>
+
+        <div class="armario">
+            <div class="seccion">
+                <span class="label-seccion">TOP / PLAYERA</span>
+                <div class="canvas-container"><canvas id="c-playera"></canvas></div>
+                <div class="controles">
+                    <button class="btn-cambiar" onclick="cambiarPrenda('playera')">Cambiar</button>
+                    <button class="btn-fijar" id="fix-playera" onclick="toggleFix('playera')">Mantener</button>
+                </div>
+            </div>
+
+            <div class="seccion">
+                <span class="label-seccion">PANTALÓN / FALDA</span>
+                <div class="canvas-container"><canvas id="c-pantalon"></canvas></div>
+                <div class="controles">
+                    <button class="btn-cambiar" onclick="cambiarPrenda('pantalon')">Cambiar</button>
+                    <button class="btn-fijar" id="fix-pantalon" onclick="toggleFix('pantalon')">Mantener</button>
+                </div>
+            </div>
+
+            <div class="seccion">
+                <span class="label-seccion">ZAPATOS</span>
+                <div class="canvas-container"><canvas id="c-zapatos"></canvas></div>
+                <div class="controles">
+                    <button class="btn-cambiar" onclick="cambiarPrenda('zapatos')">Cambiar</button>
+                    <button class="btn-fijar" id="fix-zapatos" onclick="toggleFix('zapatos')">Mantener</button>
+                </div>
+            </div>
+
+            <div class="seccion">
+                <span class="label-seccion">ACCESORIOS</span>
+                <div class="canvas-container"><canvas id="c-accesorios"></canvas></div>
+                <div class="controles">
+                    <button class="btn-cambiar" onclick="cambiarPrenda('accesorios')">Cambiar</button>
+                    <button class="btn-fijar" id="fix-accesorios" onclick="toggleFix('accesorios')">Mantener</button>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-principal" onclick="randomOutfit()">¡CAMBIAR TODO!</button>
+
+        <div class="upload-area">
+            <select id="cat-subida">
+                <option value="playera">Playera / Top</option>
+                <option value="pantalon">Pantalón / Falda</option>
+                <option value="zapatos">Zapatos</option>
+                <option value="accesorios">Accesorios</option>
+            </select>
+            <br>
+            <label for="input-foto" style="cursor:pointer; text-decoration:underline;">[+ AÑADIR FOTO DE TU ROPA]</label>
+            <input type="file" id="input-foto" accept="image/*" onchange="procesarFoto(event)">
+        </div>
+    </div>
+
+<script>
+    const coleccion = {
+        playera: [],
+        pantalon: [],
+        zapatos: [],
+        accesorios: []
+    };
+
+    const fijados = {
+        playera: false,
+        pantalon: false,
+        zapatos: false,
+        accesorios: false
+    };
+
+    function procesarFoto(event) {
+        const file = event.target.files[0];
+        const categoria = document.getElementById('cat-subida').value;
+        
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    coleccion[categoria].push(img);
+                    pintarEnCanvas(categoria, img);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function pintarEnCanvas(cat, img) {
+        const canvas = document.getElementById(`c-${cat}`);
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = 200;
+        canvas.height = 200;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Ajuste proporcional
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+        const x = (canvas.width / 2) - (img.width / 2) * scale;
+        const y = (canvas.height / 2) - (img.height / 2) * scale;
+        
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+    }
+
+    function cambiarPrenda(cat) {
+        if (coleccion[cat].length === 0) {
+            alert("Sube una foto en esta categoría primero");
+            return;
+        }
+        const randomImg = coleccion[cat][Math.floor(Math.random() * coleccion[cat].length)];
+        pintarEnCanvas(cat, randomImg);
+    }
+
+    function toggleFix(cat) {
+        fijados[cat] = !fijados[cat];
+        const btn = document.getElementById(`fix-${cat}`);
+        if (fijados[cat]) {
+            btn.classList.add('active');
+            btn.innerText = "FIJADO";
+        } else {
+            btn.classList.remove('active');
+            btn.innerText = "MANTENER";
+        }
+    }
+
+    function randomOutfit() {
+        let algoCambiado = false;
+        for (let cat in coleccion) {
+            if (!fijados[cat] && coleccion[cat].length > 0) {
+                cambiarPrenda(cat);
+                algoCambiado = true;
+            }
+        }
+        if (!algoCambiado) alert("Añade fotos de tu ropa para empezar.");
+    }
+
+    // Inicialización visual
+    window.onload = () => {
+        ['playera', 'pantalon', 'zapatos', 'accesorios'].forEach(cat => {
+            const canvas = document.getElementById(`c-${cat}`);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#333";
+            ctx.textAlign = "center";
+            ctx.fillText("SIN ROPA", 150, 75);
+        });
+    };
+</script>
+
+</body>
+</html>

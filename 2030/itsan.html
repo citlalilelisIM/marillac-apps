@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapache Chef: Pastel de Ensueño</title>
+    <style>
+        :root {
+            --rosa: #ffccd5;
+            --amarillo: #fff4bd;
+            --celeste: #a2d2ff;
+            --borde: #ff85a1;
+            --blanco: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--amarillo);
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #contenedor {
+            position: relative;
+            border: 12px solid var(--borde);
+            border-radius: 35px;
+            box-shadow: 0 20px 60px rgba(255, 133, 161, 0.4);
+            background: white;
+        }
+
+        canvas { display: block; background: var(--blanco); }
+
+        /* Burbuja de Diálogo Retro */
+        #burbuja {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            background: white;
+            border: 4px solid #ffb347;
+            border-radius: 20px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        #avatar-cat { width: 70px; height: 70px; border-radius: 50%; }
+        #texto-chat { color: #7d5a5a; font-weight: bold; font-size: 16px; flex-grow: 1; }
+
+        .controles-info {
+            margin-top: 15px;
+            color: #ff85a1;
+            font-weight: bold;
+            font-size: 0.9em;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="contenedor">
+        <div id="burbuja">
+            <canvas id="canvasGato" width="70" height="70"></canvas>
+            <div id="texto-chat">¡Miau! Bienvenido a mi cocina. Presiona ESPACIO para leer mis órdenes.</div>
+        </div>
+        <canvas id="juegoCanvas"></canvas>
+    </div>
+
+    <div class="controles-info">
+        FLECHAS: Mover | F: Saltar | ESPACIO: Siguiente orden | AGARRA ingredientes al tocarlos
+    </div>
+
+<script>
+    const canvas = document.getElementById('juegoCanvas');
+    const ctx = canvas.getContext('2d');
+    const chat = document.getElementById('texto-chat');
+    
+    canvas.width = 850;
+    canvas.height = 550;
+
+    // --- Audio de Voz ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function miauSound() {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(500 + Math.random() * 200, audioCtx.currentTime);
+        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+    }
+
+    // --- Variables de Juego ---
+    let indexMsg = 0;
+    const mensajes = [
+        "¡Hola Chef Mapache! Vamos a hacer un Pastel de Mochi Rosa. ✨",
+        "Primero, salta ('F') y agarra la HARINA que está sobre la encimera.",
+        "¡Excelente! Ahora busca las FRESAS al otro lado.",
+        "Mézclalo todo en el bol rosa... ¡miau!",
+        "¡Qué buena pinta tiene! Eres el mejor cocinero del bosque."
+    ];
+
+    const jugador = {
+        x: 100, y: 400, w: 70, h: 80,
+        vx: 0, vy: 0, 
+        velocidad: 6, gravedad: 0.8, salto: -16,
+        enSuelo: false,
+        agarrado: null
+    };
+
+    const ingredientes = [
+        { nombre: 'Harina', x: 250, y: 350, color: '#fff', tomado: false },
+        { nombre: 'Fresas', x: 600, y: 350, color: '#ff4d6d', tomado: false }
+    ];
+
+    const teclas = {};
+    window.addEventListener('keydown', e => {
+        teclas[e.code] = true;
+        if(e.code === 'Space') {
+            indexMsg = (indexMsg + 1) % mensajes.length;
+            chat.innerText = mensajes[indexMsg];
+            miauSound();
+        }
+        if(e.code === 'KeyF' && jugador.enSuelo) {
+            jugador.vy = jugador.salto;
+            jugador.enSuelo = false;
+        }
+    });
+    window.addEventListener('keyup', e => teclas[e.code] = false);
+
+    // --- Dibujo Detallado ---
+    function dibujarMapache() {
+        ctx.save();
+        ctx.translate(jugador.x + jugador.w/2, jugador.y + jugador.h/2);
+        
+        // Cola
+        ctx.fillStyle = '#555';
+        ctx.beginPath(); ctx.ellipse(-35, 20, 12, 25, Math.PI/4, 0, Math.PI*2); ctx.fill();
+        
+        // Cuerpo
+        ctx.fillStyle = '#888';
+        ctx.beginPath(); ctx.ellipse(0, 10, 25, 30, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white'; // Delantal
+        ctx.fillRect(-20, 0, 40, 30);
+
+        // Cabeza
+        ctx.fillStyle = '#888';
+        ctx.beginPath(); ctx.arc(0, -25, 25, 0, Math.PI*2); ctx.fill();
+        
+        // Antifaz detallado
+        ctx.fillStyle = '#333';
+        ctx.beginPath(); ctx.ellipse(-12, -25, 8, 12, Math.PI/6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(12, -25, 8, 12, -Math.PI/6, 0, Math.PI*2); ctx.fill();
+        
+        // Ojos y Sombrero
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(-12, -25, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(12, -25, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(-15, -55, 30, 15); ctx.strokeRect(-15, -55, 30, 15);
+
+        ctx.restore();
+
+        // Ingrediente agarrado
+        if(jugador.agarrado) {
+            ctx.fillStyle = jugador.agarrado.color;
+            ctx.beginPath(); ctx.arc(jugador.x + 35, jugador.y - 10, 15, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#333'; ctx.stroke();
+        }
+    }
+
+    function dibujarGato() {
+        const gCtx = document.getElementById('canvasGato').getContext('2d');
+        gCtx.clearRect(0,0,70,70);
+        gCtx.fillStyle = '#ffb347';
+        // Orejas
+        gCtx.beginPath(); gCtx.moveTo(10,25); gCtx.lineTo(20,5); gCtx.lineTo(35,25); gCtx.fill();
+        gCtx.beginPath(); gCtx.moveTo(35,25); gCtx.lineTo(50,5); gCtx.lineTo(60,25); gCtx.fill();
+        // Cara
+        gCtx.beginPath(); gCtx.arc(35,40,30,0,Math.PI*2); gCtx.fill();
+        gCtx.fillStyle = '#333';
+        gCtx.beginPath(); gCtx.arc(25,35,4,0,Math.PI*2); gCtx.arc(45,35,4,0,Math.PI*2); gCtx.fill();
+        gCtx.fillStyle = '#ffccd5';
+        gCtx.beginPath(); gCtx.arc(35,45,6,0,Math.PI*2); gCtx.fill();
+    }
+
+    function actualizar() {
+        if(teclas['ArrowLeft']) jugador.vx = -jugador.velocidad;
+        else if(teclas['ArrowRight']) jugador.vx = jugador.velocidad;
+        else jugador.vx = 0;
+
+        jugador.vy += jugador.gravedad;
+        jugador.x += jugador.vx;
+        jugador.y += jugador.vy;
+
+        // Suelo
+        if(jugador.y > 400) {
+            jugador.y = 400;
+            jugador.vy = 0;
+            jugador.enSuelo = true;
+        }
+
+        // Colisión con ingredientes
+        ingredientes.forEach(ing => {
+            if(!ing.tomado && !jugador.agarrado) {
+                if(jugador.x < ing.x + 30 && jugador.x + jugador.w > ing.x &&
+                   jugador.y < ing.y + 30 && jugador.y + jugador.h > ing.y) {
+                    ing.tomado = true;
+                    jugador.agarrado = ing;
+                }
+            }
+        });
+    }
+
+    function render() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        
+        // Fondo Cocina
+        ctx.fillStyle = '#ffccd5'; ctx.fillRect(0,0,canvas.width, 350);
+        ctx.fillStyle = '#fff4bd'; ctx.fillRect(0,350,canvas.width, 200);
+        
+        // Encimera
+        ctx.fillStyle = 'white'; ctx.fillRect(0, 340, canvas.width, 40);
+        ctx.strokeStyle = '#ff85a1'; ctx.lineWidth = 5; ctx.strokeRect(-5, 340, canvas.width+10, 40);
+
+        // Dibujar Ingredientes en escena
+        ingredientes.forEach(ing => {
+            if(!ing.tomado) {
+                ctx.fillStyle = ing.color;
+                ctx.beginPath(); ctx.arc(ing.x, ing.y, 20, 0, Math.PI*2); ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#7d5a5a'; ctx.font = "bold 12px Arial";
+                ctx.fillText(ing.nombre, ing.x-20, ing.y+35);
+            }
+        });
+
+        dibujarMapache();
+        dibujarGato();
+        actualizar();
+        requestAnimationFrame(render);
+    }
+
+    render();
+</script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo-Racer 2026</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #050505;
+            color: #0ff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #0ff;
+            box-shadow: 0 0 20px #0ff, inset 0 0 10px #0ff;
+        }
+
+        canvas { display: block; background: #000; }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 { font-size: 3rem; margin: 0; text-shadow: 0 0 15px #f0f; color: #f0f; }
+        p { font-size: 1.5rem; margin: 20px 0; }
+
+        button {
+            background: transparent;
+            color: #0ff;
+            border: 2px solid #0ff;
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+
+        button:hover { background: #0ff; color: #000; box-shadow: 0 0 20px #0ff; }
+
+        .stats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="stats">
+        DISTANCIA: <span id="dist-ui">0</span>m<br>
+        VELOCIDAD: <span id="speed-ui">0</span> km/h
+    </div>
+
+    <canvas id="raceCanvas"></canvas>
+
+    <div id="win-screen" class="overlay">
+        <h1>¡VICTORIA!</h1>
+        <p>ERES EL MEJOR JUGADOR</p>
+        <button onclick="resetGame()">Correr de nuevo</button>
+    </div>
+
+    <div id="lose-screen" class="overlay">
+        <h1>¡CHOQUE!</h1>
+        <p>Suerte para la próxima</p>
+        <button onclick="resetGame()">Reintentar</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('raceCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = 800;
+    canvas.height = 500;
+
+    // --- Configuración ---
+    let speed = 0;
+    let maxSpeed = 100;
+    let pos = 0;
+    let playerX = 0;
+    let distanceToWin = 10000;
+    let gameActive = true;
+    const keys = {};
+
+    // Pista (Segmentos)
+    const segments = [];
+    for(let n = 0; n < 1000; n++) {
+        segments.push({
+            color: Math.floor(n/10) % 2 ? '#111' : '#222',
+            glow: Math.floor(n/10) % 2 ? '#0ff' : 'transparent'
+        });
+    }
+
+    // Enemigos
+    let enemies = [
+        { z: 500, x: -0.5, speed: 60, color: '#f0f' },
+        { z: 1200, x: 0.5, speed: 70, color: '#ff0' },
+        { z: 2000, x: -0.2, speed: 65, color: '#0f0' }
+    ];
+
+    function drawCar(x, y, scale, color, isPlayer = false) {
+        let w = 100 * scale;
+        let h = 50 * scale;
+        
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+        
+        // Cuerpo del coche deportivo
+        ctx.fillStyle = color;
+        ctx.fillRect(x - w/2, y - h, w, h);
+        
+        // Techo/Cabina
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(x - w/4, y - h - (20*scale), w/2, 20*scale);
+        
+        // Luces traseras neón
+        ctx.fillStyle = isPlayer ? "#0ff" : "#f00";
+        ctx.fillRect(x - w/2, y - h + 5, 10*scale, 10*scale);
+        ctx.fillRect(x + w/2 - 10*scale, y - h + 5, 10*scale, 10*scale);
+        
+        ctx.shadowBlur = 0;
+    }
+
+    function update() {
+        if (!gameActive) return;
+
+        // Aceleración y movimiento
+        if (keys['ArrowUp']) speed = Math.min(speed + 1, maxSpeed);
+        else speed = Math.max(speed - 0.5, 0);
+
+        if (keys['ArrowLeft']) playerX -= 0.04 * (speed/maxSpeed);
+        if (keys['ArrowRight']) playerX += 0.04 * (speed/maxSpeed);
+
+        pos += speed;
+
+        // Limitar pista
+        if (playerX < -1.5 || playerX > 1.5) speed *= 0.95;
+
+        // UI
+        document.getElementById('dist-ui').innerText = Math.floor(pos/10);
+        document.getElementById('speed-ui').innerText = Math.floor(speed * 3);
+
+        // Victoria
+        if (pos > distanceToWin) {
+            gameActive = false;
+            document.getElementById('win-screen').style.display = 'flex';
+        }
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar Cielo Futurista
+        let grad = ctx.createLinearGradient(0, 0, 0, canvas.height/2);
+        grad.addColorStop(0, '#000');
+        grad.addColorStop(1, '#102');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height/2);
+
+        // Dibujar Pista
+        let startLine = Math.floor(pos / 200);
+        for(let n = 0; n < 50; n++) {
+            let seg = segments[(startLine + n) % segments.length];
+            let z = n * 200 - (pos % 200);
+            
+            let scale = 1 / (z/500);
+            if (z <= 0) continue;
+
+            let y = canvas.height/2 + (scale * 200);
+            let w = scale * 800;
+
+            // Suelo
+            ctx.fillStyle = seg.color;
+            ctx.fillRect(0, y, canvas.width, 20);
+
+            // Bordes neón
+            if (seg.glow !== 'transparent') {
+                ctx.fillStyle = "#0ff";
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#0ff";
+                ctx.fillRect(canvas.width/2 - w/2 - 10, y, 10, 5);
+                ctx.fillRect(canvas.width/2 + w/2, y, 10, 5);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // Enemigos y Colisiones
+        enemies.forEach(e => {
+            let relativeZ = e.z - pos;
+            if (relativeZ > 0 && relativeZ < 10000) {
+                let scale = 1 / (relativeZ/500);
+                let ex = canvas.width/2 + (e.x * scale * 800);
+                let ey = canvas.height/2 + (scale * 200);
+                
+                drawCar(ex, ey, scale, e.color);
+
+                // Lógica de choque
+                if (relativeZ < 50 && Math.abs(playerX - e.x) < 0.3) {
+                    if (speed > e.speed + 10) {
+                        // Lo sacamos del camino
+                        e.x += (playerX < e.x ? 0.5 : -0.5);
+                        score += 100;
+                    } else {
+                        // Perdemos
+                        gameActive = false;
+                        document.getElementById('lose-screen').style.display = 'flex';
+                    }
+                }
+            }
+            // Los enemigos avanzan
+            e.z += e.speed;
+        });
+
+        // Dibujar Jugador
+        drawCar(canvas.width/2 + (playerX * 300), canvas.height - 20, 1.5, '#0ff', true);
+
+        update();
+        requestAnimationFrame(render);
+    }
+
+    function resetGame() {
+        pos = 0;
+        speed = 0;
+        playerX = 0;
+        gameActive = true;
+        enemies = [
+            { z: 1000, x: -0.5, speed: 60, color: '#f0f' },
+            { z: 2500, x: 0.5, speed: 70, color: '#ff0' },
+            { z: 4000, x: -0.2, speed: 65, color: '#0f0' }
+        ];
+        document.getElementById('win-screen').style.display = 'none';
+        document.getElementById('lose-screen').style.display = 'none';
+    }
+
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    render();
+</script>
+</body>
+</html>

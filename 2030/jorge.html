@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrera Neón: Máxima Velocidad 1v1</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #contenedor {
+            position: relative;
+            border: 4px solid #fff;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+        }
+
+        #interfaz {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #f00;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        #pantalla-final {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 { color: #f00; text-shadow: 0 0 20px #f00; font-size: 3.5rem; margin: 0; }
+        button {
+            background: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            cursor: pointer;
+            box-shadow: 0 0 15px #fff;
+            font-family: inherit;
+            margin-top: 20px;
+        }
+        button:hover { background: #fff; color: #000; }
+    </style>
+</head>
+<body>
+
+<div id="contenedor">
+    <div id="interfaz">
+        <div>PUNTOS: <span id="puntos">0</span></div>
+        <div>VIDAS: <span id="vidas">5</span></div>
+    </div>
+
+    <div id="pantalla-final">
+        <h1>¡MOTOR DESTRUIDO!</h1>
+        <p>Puntos de Carrera: <span id="puntos-final">0</span></p>
+        <button onclick="reiniciarJuego()">REINTENTAR DUELO</button>
+    </div>
+
+    <canvas id="canvasJuego"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvasJuego');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 500;
+    canvas.height = 800;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function sonidoChoque() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(20, audioCtx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    }
+
+    class Humo {
+        constructor(x, y, velPista) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 2;
+            this.vy = velPista * 0.5; // El humo se queda atrás según la velocidad de la pista
+            this.vida = 1.0;
+            this.tamaño = 5 + Math.random() * 10;
+        }
+        actualizar() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vida -= 0.02;
+        }
+        dibujar() {
+            ctx.fillStyle = `rgba(150, 150, 150, ${this.vida})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.tamaño, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    class Carro {
+        constructor(x, y, color) {
+            this.x = x; this.y = y;
+            this.w = 55; this.h = 100;
+            this.color = color;
+            this.velL = 10;
+            this.velF = 7;
+        }
+        dibujar(esJugador) {
+            ctx.save();
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(this.x + 10, this.y + 30, 35, 40);
+            ctx.fillStyle = "#fff";
+            if(esJugador) {
+                ctx.shadowColor = "#fff";
+                ctx.fillRect(this.x + 5, this.y + 5, 12, 6);
+                ctx.fillRect(this.x + 38, this.y + 5, 12, 6);
+            } else {
+                ctx.fillStyle = "#0ff";
+                ctx.fillRect(this.x + 5, this.y + this.h - 11, 12, 6);
+                ctx.fillRect(this.x + 38, this.y + this.h - 11, 12, 6);
+            }
+            ctx.restore();
+        }
+    }
+
+    let jugador = new Carro(222, 600, "#f00");
+    let rival = new Carro(222, -200, "#00f");
+    let puntos = 0;
+    let vidas = 5;
+    let activo = true;
+    let teclas = {};
+    let frames = 0;
+    let velPista = 15;
+    let particulasHumo = [];
+
+    window.onkeydown = (e) => teclas[e.code] = true;
+    window.onkeyup = (e) => teclas[e.code] = false;
+
+    function reiniciarJuego() {
+        puntos = 0; vidas = 5; velPista = 15; particulasHumo = [];
+        document.getElementById('puntos').innerText = "0";
+        document.getElementById('vidas').innerText = "5";
+        document.getElementById('pantalla-final').style.display = "none";
+        jugador.x = 222; jugador.y = 600; rival.y = -200;
+        activo = true; bucle();
+    }
+
+    function bucle() {
+        if(!activo) return;
+        
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Movimiento de carretera según velocidad
+        let multiplicadorVel = (teclas['ArrowUp'] || teclas['KeyW']) ? 1.5 : 1.0;
+        let velActual = velPista * multiplicadorVel;
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.setLineDash([40, 40]);
+        ctx.lineDashOffset = -frames * velActual;
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Humo si tiene pocas vidas
+        if (vidas <= 2) {
+            particulasHumo.push(new Humo(jugador.x + jugador.w / 2, jugador.y + jugador.h, velActual));
+        }
+
+        particulasHumo.forEach((p, i) => {
+            p.actualizar();
+            p.dibujar();
+            if (p.vida <= 0) particulasHumo.splice(i, 1);
+        });
+
+        // Controles Jugador (Ahora avanza y retrocede)
+        if((teclas['ArrowLeft'] || teclas['KeyA']) && jugador.x > 10) jugador.x -= jugador.velL;
+        if((teclas['ArrowRight'] || teclas['KeyD']) && jugador.x < canvas.width - jugador.w - 10) jugador.x += jugador.velL;
+        if((teclas['ArrowUp'] || teclas['KeyW']) && jugador.y > 50) jugador.y -= jugador.velF;
+        if((teclas['ArrowDown'] || teclas['KeyS']) && jugador.y < canvas.height - 110) jugador.y += jugador.velF;
+        
+        jugador.dibujar(true);
+
+        // IA Rival (Aparece y cae)
+        rival.y += velActual * 0.7;
+        if (rival.y > -100 && rival.y < canvas.height) {
+            if (rival.x < jugador.x) rival.x += 3.5;
+            if (rival.x > jugador.x) rival.x -= 3.5;
+        }
+        rival.dibujar(false);
+
+        // Logica de Rebasar
+        if (rival.y > canvas.height) {
+            rival.y = -300;
+            rival.x = Math.random() * (canvas.width - 60) + 10;
+            puntos += 1000;
+            velPista += 0.4;
+            document.getElementById('puntos').innerText = puntos;
+        }
+
+        // Colisión
+        if(rival.x < jugador.x + jugador.w && rival.x + rival.w > jugador.x &&
+           rival.y < jugador.y + jugador.h && rival.y + rival.h > jugador.y) {
+            
+            sonidoChoque();
+            vidas--;
+            document.getElementById('vidas').innerText = vidas;
+            rival.y = -400;
+
+            if(vidas <= 0) {
+                activo = false;
+                document.getElementById('puntos-final').innerText = puntos;
+                document.getElementById('pantalla-final').style.display = "flex";
+            }
+        }
+
+        frames++;
+        requestAnimationFrame(bucle);
+    }
+
+    bucle();
+</script>
+</body>
+</html>

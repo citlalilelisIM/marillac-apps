@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Neon Retro Shooter</title>
+    <style>
+        body { margin: 0; background: #000; color: #0ff; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #0ff; box-shadow: 0 0 20px #0ff; background: #050505; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
+        #gameOver { position: absolute; text-align: center; display: none; }
+        button { background: transparent; color: #0f0; border: 2px solid #0f0; padding: 10px 20px; cursor: pointer; font-family: inherit; font-size: 1.2rem; }
+        button:hover { background: #0f0; color: #000; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        Puntos: <span id="score">0</span> | Vidas: <span id="lives">3</span>
+    </div>
+
+    <div id="gameOver">
+        <h1 style="color: #f0f; font-size: 3rem;">GAME OVER</h1>
+        <button onclick="resetGame()">Reiniciar</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const gameOverEl = document.getElementById('gameOver');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let score = 0;
+    let lives = 3;
+    let gameRunning = true;
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    class Player {
+        constructor() {
+            this.width = 30;
+            this.height = 30;
+            this.x = canvas.width / 2 - 15;
+            this.y = canvas.height - 50;
+            this.speed = 5;
+            this.color = '#0ff';
+        }
+        draw() {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(this.x + this.width / 2, this.y);
+            ctx.lineTo(this.x, this.y + this.height);
+            ctx.lineTo(this.x + this.width, this.y + this.height);
+            ctx.closePath();
+            ctx.stroke();
+        }
+        update() {
+            if ((keys['ArrowLeft'] || keys['KeyA']) && this.x > 0) this.x -= this.speed;
+            if ((keys['ArrowRight'] || keys['KeyD']) && this.x < canvas.width - this.width) this.x += this.speed;
+            if ((keys['ArrowUp'] || keys['KeyW']) && this.y > 0) this.y -= this.speed;
+            if ((keys['ArrowDown'] || keys['KeyS']) && this.y < canvas.height - this.height) this.y += this.speed;
+        }
+    }
+
+    class Bullet {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.speed = 7;
+            this.radius = 3;
+        }
+        draw() {
+            ctx.fillStyle = '#ff0';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        update() { this.y -= this.speed; }
+    }
+
+    class Enemy {
+        constructor() {
+            this.width = 30;
+            this.height = 30;
+            this.x = Math.random() * (canvas.width - 30);
+            this.y = -30;
+            this.speed = 2 + Math.random() * 2;
+        }
+        draw() {
+            ctx.strokeStyle = '#f0f';
+            ctx.strokeRect(this.x, this.y, this.width, this.height);
+        }
+        update() { this.y += this.speed; }
+    }
+
+    let player = new Player();
+    let bullets = [];
+    let enemies = [];
+    let frames = 0;
+
+    function resetGame() {
+        score = 0; lives = 3; enemies = []; bullets = []; gameRunning = true;
+        scoreEl.innerText = score; livesEl.innerText = lives;
+        gameOverEl.style.display = 'none';
+        animate();
+    }
+
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Space' && gameRunning) {
+            bullets.push(new Bullet(player.x + player.width/2, player.y));
+        }
+    });
+
+    function animate() {
+        if (!gameRunning) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        player.draw();
+        player.update();
+
+        // Spawn enemies
+        if (frames % 60 === 0) enemies.push(new Enemy());
+
+        bullets.forEach((b, i) => {
+            b.draw(); b.update();
+            if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        enemies.forEach((en, i) => {
+            en.draw(); en.update();
+            
+            // Collision bullet-enemy
+            bullets.forEach((b, bi) => {
+                if (b.x > en.x && b.x < en.x + en.width && b.y > en.y && b.y < en.y + en.height) {
+                    enemies.splice(i, 1);
+                    bullets.splice(bi, 1);
+                    score += 10;
+                    scoreEl.innerText = score;
+                }
+            });
+
+            // Collision player-enemy
+            if (en.x < player.x + player.width && en.x + en.width > player.x && 
+                en.y < player.y + player.height && en.y + en.height > player.y) {
+                enemies.splice(i, 1);
+                lives--;
+                livesEl.innerText = lives;
+                if (lives <= 0) {
+                    gameRunning = false;
+                    gameOverEl.style.display = 'block';
+                }
+            }
+
+            if (en.y > canvas.height) enemies.splice(i, 1);
+        });
+
+        frames++;
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+</script>
+</body>
+</html>
