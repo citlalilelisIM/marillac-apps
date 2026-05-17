@@ -125,9 +125,11 @@
 
     <!-- BOTONES DE DIRECTORIOS -->
     <div class="folders">
+      <!-- IMPORTANTE: Cada botón debe tener su etiqueta de cierre -->
       <div class="folder-btn" onclick="showFolder('2010')">
         📁 Grupo 2010
       </div>
+
       <div class="folder-btn" onclick="showFolder('2020')">
         📁 Grupo 2020
       </div>
@@ -161,14 +163,19 @@
     // AQUI CONFIGURAS TUS DIRECTORIOS Y ARCHIVOS HTML
     const folders = {
 
+      // --- CORRECCIÓN: He completado este array con contenido de ejemplo ---
       2010: [
         {
-          title: "XX",
-          file: 
+          title: "Proyecto A",
+          file: "2010/proyecto_a/index.html"
         },
         {
-          title: "YY",
-          file: 
+          title: "Proyecto B",
+          file: "2010/proyecto_b/index.html"
+        },
+        {
+          title: "Proyecto C",
+          file: "2010/proyecto_c/index.html"
         }
       ],
 
@@ -202,6 +209,22 @@
     function showFolder(folderName){
 
       const container = document.getElementById("apps-container");
+
+      // Pequeña validación: si el folder no existe o está vacío, mostramos un mensaje
+      if (!folders[folderName] || folders[folderName].length === 0) {
+        container.innerHTML = `
+          <h2 class="section-title">
+            Directorio: ${folderName}
+          </h2>
+          <div class="apps">
+            <div class="card">
+              <h3>No hay proyectos disponibles</h3>
+              <p>Este directorio aún no tiene aplicaciones configuradas.</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
 
       let html = `
         <h2 class="section-title">
