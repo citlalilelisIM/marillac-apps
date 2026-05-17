@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Debian OS - Integration Pro</title>
+    <style>
+        :root {
+            --debian-red: #d70751;
+            --taskbar-bg: rgba(15, 15, 15, 0.98);
+            --win-bg: #1a1a1a;
+            --term-green: #00ff41;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            height: 100%; width: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            background: radial-gradient(circle, #073642 0%, #001b21 100%);
+            user-select: none;
+        }
+
+        /* --- ESCRITORIO --- */
+        #desktop { width: 100%; height: calc(100% - 45px); position: relative; }
+
+        .desktop-icon {
+            width: 80px; position: absolute; text-align: center;
+            cursor: move; color: white; text-shadow: 1px 1px 3px black;
+            padding: 10px; border-radius: 6px;
+        }
+        .desktop-icon:hover { background: rgba(255,255,255,0.1); }
+        .desktop-icon .img { font-size: 40px; pointer-events: none; }
+        .desktop-icon span { font-size: 11px; pointer-events: none; display: block; margin-top: 5px; }
+
+        /* --- VENTANAS --- */
+        .window {
+            position: absolute; background: var(--win-bg);
+            border: 1px solid #444; border-radius: 6px;
+            display: none; flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8); z-index: 10;
+        }
+
+        .title-bar {
+            background: #2d2d2d; padding: 8px 12px;
+            display: flex; justify-content: space-between;
+            align-items: center; cursor: move; color: #ccc; font-size: 12px;
+        }
+
+        .close-btn { background: #ff5f56; width: 12px; height: 12px; border-radius: 50%; cursor: pointer; border: none; }
+
+        /* --- TERMINAL PRO --- */
+        .term-container {
+            height: 350px; width: 650px;
+            padding: 15px; color: #f0f0f0;
+            font-family: 'Consolas', monospace;
+            overflow-y: auto; white-space: pre-wrap; font-size: 13px;
+        }
+        .input-line { display: flex; padding: 10px; background: #000; }
+        #cmd-input { background: transparent; border: none; color: var(--term-green); outline: none; flex: 1; font-family: inherit; }
+
+        /* --- APPS ADICIONALES --- */
+        .calc-container { background: #333; padding: 15px; width: 220px; }
+        #calc-display { width: 100%; height: 35px; background: #aebcbf; border: none; margin-bottom: 10px; text-align: right; padding: 5px; box-sizing: border-box; }
+        .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+        .calc-grid button { padding: 8px; background: #555; color: white; border: none; cursor: pointer; }
+
+        #paint-canvas { background: white; cursor: crosshair; }
+
+        /* --- TASKBAR --- */
+        #taskbar {
+            height: 45px; width: 100%; background: var(--taskbar-bg);
+            position: absolute; bottom: 0; display: flex; align-items: center;
+            padding: 0 15px; border-top: 1px solid #333; z-index: 2000;
+        }
+        .start-btn { background: var(--debian-red); color: white; padding: 4px 12px; border-radius: 3px; font-weight: bold; cursor: pointer; }
+        #clock { color: white; margin-left: auto; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div id="desktop" onclick="focusTerminal()">
+    <div class="desktop-icon" style="top:20px; left:20px;" onmousedown="dragElement(this)" ondblclick="openWindow('term-win')">
+        <div class="img">📟</div><span>Terminal</span>
+    </div>
+    <div class="desktop-icon" style="top:130px; left:20px;" onmousedown="dragElement(this)" ondblclick="openWindow('calc-win')">
+        <div class="img">🧮</div><span>Calculadora</span>
+    </div>
+    <div class="desktop-icon" style="top:240px; left:20px;" onmousedown="dragElement(this)" ondblclick="openWindow('paint-win')">
+        <div class="img">🎨</div><span>Paint</span>
+    </div>
+</div>
+
+<div id="term-win" class="window" style="top: 50px; left: 100px;">
+    <div class="title-bar" onmousedown="dragElement(this.parentElement)">
+        <button class="close-btn" onclick="closeWindow('term-win')"></button>
+        <span>bash — user@debian</span>
+        <div style="width:12px"></div>
+    </div>
+    <div class="term-container" id="term-out">--- Debian GNU/Linux 12 (bookworm) ---
+Escribe 'help' para ver comandos avanzados.</div>
+    <div class="input-line">
+        <span style="color:var(--debian-red); font-weight:bold; margin-right:8px;">user@debian:~$</span>
+        <input type="text" id="cmd-input" spellcheck="false" autocomplete="off">
+    </div>
+</div>
+
+<div id="calc-win" class="window" style="top: 100px; left: 500px;">
+    <div class="title-bar" onmousedown="dragElement(this.parentElement)">
+        <button class="close-btn" onclick="closeWindow('calc-win')"></button>
+        <span>Calculadora</span><div style="width:12px"></div>
+    </div>
+    <div class="calc-container">
+        <input type="text" id="calc-display" readonly value="0">
+        <div class="calc-grid">
+            <button onclick="clearCalc()">C</button><button onclick="press('/')">/</button><button onclick="press('*')">*</button><button onclick="press('-')">-</button>
+            <button onclick="press('7')">7</button><button onclick="press('8')">8</button><button onclick="press('9')">9</button><button onclick="calculate()" style="grid-row: span 3">=</button>
+            <button onclick="press('4')">4</button><button onclick="press('5')">5</button><button onclick="press('6')">6</button>
+            <button onclick="press('1')">1</button><button onclick="press('2')">2</button><button onclick="press('3')">3</button>
+        </div>
+    </div>
+</div>
+
+<div id="paint-win" class="window" style="top: 250px; left: 300px;">
+    <div class="title-bar" onmousedown="dragElement(this.parentElement)">
+        <button class="close-btn" onclick="closeWindow('paint-win')"></button>
+        <span>Paint</span><div style="width:12px"></div>
+    </div>
+    <div style="background:white; display:flex; flex-direction:column;">
+        <canvas id="paint-canvas" width="400" height="300"></canvas>
+        <div style="padding:5px; background:#ddd;"><input type="color" id="p-color"> <button onclick="ctx.clearRect(0,0,400,300)">Borrar</button></div>
+    </div>
+</div>
+
+<div id="taskbar">
+    <div class="start-btn" onclick="openWindow('term-win')">🍥 Inicio</div>
+    <div id="clock">00:00:00</div>
+</div>
+
+<script>
+    // --- LÓGICA TERMINAL PRO ---
+    const termOut = document.getElementById('term-out');
+    const cmdIn = document.getElementById('cmd-input');
+    let history = [];
+    let hIdx = -1;
+
+    const fs = { "leeme.txt": "Hola! Este es el nuevo motor de terminal.", "config.log": "System OK" };
+
+    const commands = {
+        'help': "Comandos: ls, cat [file], echo [text], top, ip addr, neofetch, clear",
+        'neofetch': `<span style="color:var(--debian-red)">  _,yyAAyy,_  </span>  user@debian\n<span style="color:var(--debian-red)"> dP'      \`Yb </span>  -----------\n<span style="color:var(--debian-red)">|b        d|</span>   OS: Debian 12\n<span style="color:var(--debian-red)"> \`YaaaaaaY' </span>   Kernel: Web-JS`,
+        'ip addr': "1: lo: 127.0.0.1/8\n2: eth0: 192.168.1.15/24",
+        'top': "Mem: 512MB/2GB usado\nCPU: 1.2% idle\nPID 1: init\nPID 42: bash"
+    };
+
+    cmdIn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') {
+            if (hIdx < history.length - 1) { hIdx++; cmdIn.value = history[history.length - 1 - hIdx]; }
+        }
+        if (e.key === 'Enter') {
+            const raw = cmdIn.value.trim();
+            const [cmd, ...args] = raw.split(' ');
+            if(raw) { history.push(raw); hIdx = -1; }
+
+            printLine(`<span style="color:var(--debian-red)">user@debian:~$</span> ${raw}`);
+
+            if (cmd === 'clear') termOut.innerHTML = "";
+            else if (cmd === 'ls') printLine(Object.keys(fs).join('  '));
+            else if (cmd === 'echo') printLine(args.join(' '));
+            else if (cmd === 'cat') printLine(fs[args[0]] || "Archivo no encontrado");
+            else if (commands[cmd]) printLine(commands[cmd]);
+            else if (raw) printLine(`bash: ${cmd}: comando no encontrado`);
+
+            cmdIn.value = "";
+            termOut.scrollTop = termOut.scrollHeight;
+        }
+    });
+
+    function printLine(t) {
+        const d = document.createElement('div');
+        d.innerHTML = t;
+        termOut.appendChild(d);
+    }
+
+    // --- FUNCIONES APPS ---
+    let calcV = "";
+    function press(n) { calcV += n; document.getElementById('calc-display').value = calcV; }
+    function clearCalc() { calcV = ""; document.getElementById('calc-display').value = "0"; }
+    function calculate() { try { calcV = eval(calcV).toString(); document.getElementById('calc-display').value = calcV; } catch { calcV = ""; } }
+
+    const canvas = document.getElementById('paint-canvas');
+    const ctx = canvas.getContext('2d');
+    let draw = false;
+    canvas.onmousedown = () => draw = true;
+    canvas.onmouseup = () => { draw = false; ctx.beginPath(); };
+    canvas.onmousemove = (e) => {
+        if(!draw) return;
+        ctx.strokeStyle = document.getElementById('p-color').value;
+        const r = canvas.getBoundingClientRect();
+        ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+        ctx.stroke();
+    };
+
+    // --- MOTOR VENTANAS ---
+    function openWindow(id) { document.getElementById(id).style.display = 'flex'; focusTerminal(); }
+    function closeWindow(id) { document.getElementById(id).style.display = 'none'; }
+    function focusTerminal() { if(document.getElementById('term-win').style.display === 'flex') cmdIn.focus(); }
+
+    function dragElement(el) {
+        let p1=0, p2=0, p3=0, p4=0;
+        el.onmousedown = (e) => {
+            p3 = e.clientX; p4 = e.clientY;
+            document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
+            document.onmousemove = (e) => {
+                p1 = p3 - e.clientX; p2 = p4 - e.clientY;
+                p3 = e.clientX; p4 = e.clientY;
+                el.style.top = (el.offsetTop - p2) + "px"; el.style.left = (el.offsetLeft - p1) + "px";
+            };
+        };
+    }
+
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString(); }, 1000);
+</script>
+</body>
+</html>

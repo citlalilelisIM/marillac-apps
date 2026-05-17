@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Block Blast Corrected</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --cell: #1e293b;
+            --accent: #38bdf8;
+        }
+
+        body {
+            background: var(--bg);
+            color: white;
+            font-family: 'Arial Rounded MT Bold', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #score-container { text-align: center; margin-bottom: 20px; }
+        #score { font-size: 3rem; margin: 0; color: var(--accent); text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 40px);
+            grid-template-rows: repeat(8, 40px);
+            gap: 4px;
+            background: #334155;
+            padding: 10px;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .cell { width: 40px; height: 40px; background: var(--cell); border-radius: 4px; }
+
+        #tray {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 50px;
+            height: 120px;
+            width: 100%;
+        }
+
+        .piece {
+            display: grid;
+            gap: 2px;
+            cursor: grab;
+            position: relative;
+            z-index: 10;
+        }
+
+        .block {
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            border: 2px solid rgba(255,255,255,0.1);
+            box-shadow: inset -4px -4px 0 rgba(0,0,0,0.2);
+        }
+
+        .placed { position: absolute; z-index: 5; }
+        
+        /* Esta clase se aplica mientras arrastras */
+        .dragging {
+            cursor: grabbing !important;
+            z-index: 9999 !important;
+            filter: brightness(1.2);
+            pointer-events: none; /* Evita interferencias con el mousemove */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="score-container">
+        <h1 id="score">0</h1>
+        <div id="round-text">RONDA 1</div>
+    </div>
+
+    <div id="board"></div>
+    <div id="tray"></div>
+
+    <script>
+        const board = document.getElementById('board');
+        const tray = document.getElementById('tray');
+        const scoreEl = document.getElementById('score');
+        
+        let score = 0;
+        let grid = Array(8).fill().map(() => Array(8).fill(null));
+
+        const SHAPES = [
+            { s: [[1,1],[1,1]], c: '#f87171' },
+            { s: [[1,1,1]], c: '#60a5fa' },
+            { s: [[1,1,1,1]], c: '#2dd4bf' },
+            { s: [[1,1,1],[0,1,0]], c: '#a78bfa' },
+            { s: [[1,0],[1,0],[1,1]], c: '#fbbf24' },
+            { s: [[1]], c: '#4ade80' }
+        ];
+
+        function init() {
+            for (let i = 0; i < 64; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                board.appendChild(cell);
+            }
+            spawnPieces();
+        }
+
+        function spawnPieces() {
+            tray.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const data = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+                createPiece(data);
+            }
+        }
+
+        function createPiece(data) {
+            const container = document.createElement('div');
+            container.className = 'piece';
+            container.style.gridTemplateColumns = `repeat(${data.s[0].length}, 40px)`;
+            
+            data.s.forEach((row) => {
+                row.forEach((val) => {
+                    const b = document.createElement('div');
+                    b.className = 'block';
+                    if (val) b.style.background = data.c;
+                    else b.style.opacity = '0';
+                    container.appendChild(b);
+                });
+            });
+
+            addEvents(container, data);
+            tray.appendChild(container);
+        }
+
+        function addEvents(el, data) {
+            let offsetX = 0, offsetY = 0;
+
+            const onStart = (e) => {
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = el.getBoundingClientRect();
+                
+                // CORRECCIÓN: Calcular la distancia exacta entre el dedo y la esquina de la pieza
+                offsetX = touch.clientX - rect.left;
+                offsetY = touch.clientY - rect.top;
+
+                el.classList.add('dragging');
+                el.style.position = 'fixed';
+                moveAt(touch.clientX, touch.clientY);
+
+                const onMove = (me) => {
+                    const mt = me.touches ? me.touches[0] : me;
+                    moveAt(mt.clientX, mt.clientY);
+                };
+
+                const onEnd = (ee) => {
+                    el.classList.remove('dragging');
+                    const finalRect = el.getBoundingClientRect();
+                    const boardRect = board.getBoundingClientRect();
+
+                    // Lógica de colisión con el tablero
+                    const col = Math.round((finalRect.left - boardRect.left) / 44);
+                    const row = Math.round((finalRect.top - boardRect.top) / 44);
+
+                    if (canPlace(data.s, row, col)) {
+                        place(data.s, data.c, row, col);
+                        el.remove();
+                        if (tray.children.length === 0) spawnPieces();
+                        checkLines();
+                    } else {
+                        // Reset si falla
+                        el.style.position = 'relative';
+                        el.style.left = '0';
+                        el.style.top = '0';
+                    }
+
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onEnd);
+                    document.removeEventListener('touchmove', onMove);
+                    document.removeEventListener('touchend', onEnd);
+                };
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onEnd);
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onEnd);
+            };
+
+            function moveAt(clientX, clientY) {
+                // CORRECCIÓN: Restar el offset para que la pieza no "salte" arriba
+                el.style.left = (clientX - offsetX) + 'px';
+                el.style.top = (clientY - offsetY) + 'px';
+            }
+
+            el.addEventListener('mousedown', onStart);
+            el.addEventListener('touchstart', onStart, { passive: false });
+        }
+
+        function canPlace(shape, row, col) {
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) {
+                        let nr = row + r, nc = col + c;
+                        if (nr < 0 || nr > 7 || nc < 0 || nc > 7 || grid[nr][nc]) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function place(shape, color, row, col) {
+            shape.forEach((rData, r) => {
+                rData.forEach((val, c) => {
+                    if (val) {
+                        grid[row+r][col+c] = color;
+                        const b = document.createElement('div');
+                        b.className = 'block placed';
+                        b.style.background = color;
+                        b.style.left = ((col+c) * 44 + 10) + 'px';
+                        b.style.top = ((row+r) * 44 + 10) + 'px';
+                        b.id = `b-${row+r}-${col+c}`;
+                        board.appendChild(b);
+                    }
+                });
+            });
+            score += 10 * shape.flat().filter(x => x).length;
+            scoreEl.innerText = score;
+        }
+
+        function checkLines() {
+            let rToClear = [], cToClear = [];
+            for (let i = 0; i < 8; i++) {
+                if (grid[i].every(x => x !== null)) rToClear.push(i);
+                let col = [];
+                for (let j = 0; j < 8; j++) col.push(grid[j][i]);
+                if (col.every(x => x !== null)) cToClear.push(i);
+            }
+
+            rToClear.forEach(r => {
+                for(let c=0; c<8; c++) {
+                    grid[r][c] = null;
+                    document.getElementById(`b-${r}-${c}`)?.remove();
+                }
+            });
+            cToClear.forEach(c => {
+                for(let r=0; r<8; r++) {
+                    grid[r][c] = null;
+                    document.getElementById(`b-${r}-${c}`)?.remove();
+                }
+            });
+
+            if (rToClear.length || cToClear.length) {
+                score += (rToClear.length + cToClear.length) * 100;
+                scoreEl.innerText = score;
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

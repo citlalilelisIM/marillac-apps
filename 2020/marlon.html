@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neón Commander - Boss Edition</title>
+    <style>
+        body {
+            margin: 0; background: #000; color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden;
+        }
+        #contenedor { position: relative; border: 3px solid #222; }
+        canvas { display: block; background: #000; }
+        .hud {
+            position: absolute; top: 10px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between;
+            color: #0ff; font-size: 18px; text-shadow: 0 0 8px #0ff;
+            pointer-events: none; z-index: 5;
+        }
+        #boss-ui {
+            position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+            width: 400px; display: none; text-align: center;
+        }
+        #boss-bar-bg { width: 100%; height: 12px; border: 1px solid #f00; background: #200; }
+        #boss-bar-fill { width: 100%; height: 100%; background: #f00; box-shadow: 0 0 15px #f00; transition: width 0.1s; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: none;
+            flex-direction: column; justify-content: center; align-items: center; z-index: 10;
+        }
+        button {
+            background: transparent; color: #0f0; border: 2px solid #0f0;
+            padding: 15px 30px; cursor: pointer; font-family: inherit;
+            margin-top: 20px; box-shadow: 0 0 10px #0f0; font-weight: bold;
+        }
+        button:hover { background: #0f0; color: #000; }
+        #anuncio {
+            position: absolute; top: 40%; width: 100%; text-align: center;
+            font-size: 50px; color: #f0f; text-shadow: 0 0 20px #f0f;
+            display: none; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="contenedor">
+    <div class="hud">
+        <div>Puntos: <span id="puntos">0</span></div>
+        <div>Oleada: <span id="num-oleada">1</span></div>
+        <div>Vidas: <span id="vidas">3</span></div>
+    </div>
+
+    <div id="boss-ui">
+        <div style="color: #f00; font-size: 14px; margin-bottom: 5px; font-weight: bold;">AMENAZA NIVEL JEFE</div>
+        <div id="boss-bar-bg"><div id="boss-bar-fill"></div></div>
+    </div>
+
+    <div id="anuncio">OLEADA 1</div>
+    <canvas id="juego"></canvas>
+
+    <div id="overlay">
+        <h1 id="msg-final" style="color: #f00; text-shadow: 0 0 15px #f00; font-size: 40px;">SISTEMA CAÍDO</h1>
+        <p>Puntos: <span id="puntos-final">0</span></p>
+        <p>Oleada: <span id="oleada-final">0</span></p>
+        <button onclick="location.reload()">REINICIAR SISTEMA</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('juego');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800; canvas.height = 600;
+
+    let score = 0, lives = 3, wave = 1, gameActive = true;
+    let keys = {}, enemies = [], bullets = [], seekers = [], bossBullets = [];
+    let enemiesInWave = 5, enemiesSpawned = 0, lastSpawn = 0;
+    let nextSeekerTime = 0, isBossLevel = false;
+
+    const player = { x: 380, y: 520, w: 40, h: 40, speed: 7, color: '#0ff' };
+    const boss = { active: false, x: 300, y: -150, w: 120, h: 60, hp: 0, maxHp: 0, speed: 8, dir: 1 };
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Space' && gameActive) {
+            bullets.push({ x: player.x + 17, y: player.y, w: 6, h: 15, speed: 10, color: '#0f0' });
+        }
+    });
+
+    function initWave() {
+        isBossLevel = (wave % 5 === 0);
+        enemiesSpawned = 0;
+        enemies = [];
+        enemiesInWave = 5 + (wave * 2);
+        
+        const div = document.getElementById('anuncio');
+        div.innerText = isBossLevel ? "¡ALERTA: JEFE!" : `OLEADA ${wave}`;
+        div.style.display = 'block';
+        setTimeout(() => div.style.display = 'none', 2000);
+
+        if (isBossLevel) {
+            boss.active = true;
+            boss.hp = 100 + (wave * 20);
+            boss.maxHp = boss.hp;
+            boss.y = -100;
+            boss.speed = player.speed + 1; // Más rápido que el jugador
+            document.getElementById('boss-ui').style.display = 'block';
+            document.getElementById('boss-bar-fill').style.width = "100%";
+        }
+    }
+
+    function checkRect(r1, r2) {
+        return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x && r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
+    }
+
+    function update(time) {
+        if (!gameActive) return;
+
+        // Movimiento Jugador
+        if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > 0) player.x -= player.speed;
+        if ((keys['ArrowRight'] || keys['KeyD']) && player.x < canvas.width - player.w) player.x += player.speed;
+        if ((keys['ArrowUp'] || keys['KeyW']) && player.y > 0) player.y -= player.speed;
+        if ((keys['ArrowDown'] || keys['KeyS']) && player.y < canvas.height - player.h) player.y += player.speed;
+
+        // Balas Teledirigidas (Cada 4 seg)
+        if (time > nextSeekerTime) {
+            seekers.push({ x: player.x + 20, y: player.y, r: 5, speed: 6, color: '#ff0' });
+            nextSeekerTime = time + 4000;
+        }
+
+        seekers.forEach((s, i) => {
+            let target = boss.active ? boss : enemies[0];
+            if (target) {
+                let angle = Math.atan2((target.y + target.h/2) - s.y, (target.x + target.w/2) - s.x);
+                s.x += Math.cos(angle) * s.speed;
+                s.y += Math.sin(angle) * s.speed;
+            } else { s.y -= s.speed; }
+
+            // Colisión Seeker con Jefe
+            if (boss.active && Math.hypot(s.x - (boss.x + boss.w/2), s.y - (boss.y + boss.h/2)) < 40) {
+                boss.hp -= 5;
+                seekers.splice(i, 1);
+            }
+            // Colisión Seeker con Enemigos
+            enemies.forEach((en, ei) => {
+                if (Math.hypot(s.x - (en.x + en.w/2), s.y - (en.y + en.h/2)) < 25) {
+                    enemies.splice(ei, 1); seekers.splice(i, 1);
+                    score += 150;
+                }
+            });
+            if (s.y < 0 || s.x < 0 || s.x > canvas.width) seekers.splice(i, 1);
+        });
+
+        // Lógica del Jefe
+        if (boss.active) {
+            if (boss.y < 80) boss.y += 2;
+            boss.x += boss.speed * boss.dir;
+            if (boss.x <= 0 || boss.x >= canvas.width - boss.w) boss.dir *= -1;
+
+            if (Math.random() < 0.05) { // Disparos del Jefe
+                bossBullets.push({ x: boss.x + boss.w/2, y: boss.y + boss.h, w: 10, h: 10, speed: 6 });
+            }
+
+            document.getElementById('boss-bar-fill').style.width = (boss.hp / boss.maxHp * 100) + "%";
+            if (boss.hp <= 0) {
+                boss.active = false;
+                score += 1000 * wave;
+                document.getElementById('boss-ui').style.display = 'none';
+                wave++;
+                initWave();
+            }
+        }
+
+        bossBullets.forEach((bb, i) => {
+            bb.y += bb.speed;
+            if (checkRect(bb, player)) { bossBullets.splice(i, 1); perderVida(); }
+            if (bb.y > canvas.height) bossBullets.splice(i, 1);
+        });
+
+        // Enemigos Normales
+        if (!boss.active && enemiesSpawned < enemiesInWave && time - lastSpawn > Math.max(200, 1500 - wave * 100)) {
+            enemies.push({ x: Math.random() * (canvas.width - 40), y: -40, w: 40, h: 40, speed: 2 + (wave * 0.3), color: '#f0f' });
+            enemiesSpawned++; lastSpawn = time;
+        }
+
+        enemies.forEach((en, i) => {
+            en.y += en.speed;
+            if (checkRect(en, player)) { enemies.splice(i, 1); perderVida(); }
+            bullets.forEach((b, bi) => {
+                if (checkRect(b, en)) { enemies.splice(ei = i, 1); bullets.splice(bi, 1); score += 100; }
+            });
+            if (en.y > canvas.height) { enemies.splice(i, 1); perderVida(); }
+        });
+
+        // Balas contra Jefe
+        bullets.forEach((b, bi) => {
+            b.y -= b.speed;
+            if (boss.active && checkRect(b, boss)) { bullets.splice(bi, 1); boss.hp -= 2; }
+            if (b.y < 0) bullets.splice(bi, 1);
+        });
+
+        if (!boss.active && enemiesSpawned >= enemiesInWave && enemies.length === 0) {
+            wave++; initWave();
+        }
+
+        document.getElementById('puntos').innerText = score;
+        document.getElementById('num-oleada').innerText = wave;
+    }
+
+    function perderVida() {
+        lives--;
+        document.getElementById('vidas').innerText = lives;
+        if (lives <= 0) {
+            gameActive = false;
+            document.getElementById('puntos-final').innerText = score;
+            document.getElementById('oleada-final').innerText = wave;
+            document.getElementById('overlay').style.display = 'flex';
+        }
+    }
+
+    function dibujar() {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.shadowBlur = 15;
+
+        // Jugador
+        ctx.shadowColor = player.color; ctx.fillStyle = player.color;
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        // Jefe
+        if (boss.active) {
+            ctx.shadowColor = '#f00'; ctx.strokeStyle = '#f00'; ctx.lineWidth = 3;
+            ctx.strokeRect(boss.x, boss.y, boss.w, boss.h);
+        }
+
+        // Proyectiles
+        bullets.forEach(b => { ctx.shadowColor = b.color; ctx.fillStyle = b.color; ctx.fillRect(b.x, b.y, b.w, b.h); });
+        seekers.forEach(s => { ctx.shadowColor = s.color; ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); });
+        bossBullets.forEach(bb => { ctx.shadowColor = '#f00'; ctx.fillStyle = '#f00'; ctx.fillRect(bb.x, bb.y, bb.w, bb.h); });
+        enemies.forEach(en => { ctx.shadowColor = en.color; ctx.strokeStyle = en.color; ctx.strokeRect(en.x, en.y, en.w, en.h); });
+
+        ctx.shadowBlur = 0;
+        if (gameActive) requestAnimationFrame(t => { update(t); dibujar(); });
+    }
+
+    initWave();
+    dibujar();
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kokoro Pets ✨ Diario de Vínculo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pink-soft: #ffdee9;
+            --pink-strong: #ffafbd;
+            --blue-kawaii: #b2fefa;
+            --white: #ffffff;
+            --text-color: #6d5d6e;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: var(--pink-soft);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #app-container {
+            background: var(--white);
+            width: 350px;
+            height: 650px;
+            border-radius: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+            border: 8px solid var(--white);
+        }
+
+        .screen {
+            padding: 20px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .active { display: flex; }
+
+        h1, h2 { font-family: 'Fredoka One', cursive; color: var(--pink-strong); }
+
+        /* Estilos de Botones */
+        button {
+            background: var(--pink-strong);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: 'Fredoka One', cursive;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover { transform: scale(1.05); }
+
+        input, textarea {
+            width: 90%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid var(--pink-soft);
+            border-radius: 15px;
+            outline: none;
+        }
+
+        /* Mascota */
+        .pet-container {
+            background: var(--blue-kawaii);
+            width: 100%;
+            height: 200px;
+            border-radius: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        #pet-sprite { font-size: 80px; transition: all 0.5s ease; }
+        .stats { font-size: 14px; font-weight: bold; color: #555; }
+
+        /* Emojis */
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .emoji-item {
+            font-size: 30px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 10px;
+            transition: background 0.3s;
+        }
+
+        .emoji-item.selected { background: var(--pink-soft); border: 2px solid var(--pink-strong); }
+
+        /* SOS */
+        .sos-btn {
+            background: #ff6b6b;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .phrase-box {
+            background: #fff9c4;
+            padding: 10px;
+            border-radius: 15px;
+            font-style: italic;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    
+    <div id="screen-register" class="screen active">
+        <h1>¡Bienvenido!</h1>
+        <p>Introduce tu nombre para comenzar tu diario mágico.</p>
+        <input type="text" id="username" placeholder="Tu nombre artístico...">
+        <button onclick="goToLink()">Siguiente ✨</button>
+    </div>
+
+    <div id="screen-link" class="screen">
+        <h2>Vincular Pareja</h2>
+        <p>Tu código secreto es:</p>
+        <div id="my-code" style="font-weight: bold; font-size: 20px; color: var(--pink-strong); background: #eee; padding: 10px; border-radius: 10px;">KOKORO-777</div>
+        <p>Introduce el código de tu pareja:</p>
+        <input type="text" id="partner-code" placeholder="CÓDIGO-123">
+        <button onclick="startApp()">Conectar Vínculo ❤️</button>
+    </div>
+
+    <div id="screen-main" class="screen">
+        <div class="pet-container">
+            <div id="pet-sprite">🐣</div>
+            <div class="stats">Nivel de Amor: <span id="pet-level">0</span></div>
+            <div id="pet-name" style="font-weight: bold;">Huevo Misterioso</div>
+        </div>
+        
+        <div class="phrase-box" id="daily-phrase">"¡Escribir nos hace crecer juntos!"</div>
+
+        <div class="emoji-grid" id="emoji-selector">
+            <div class="emoji-item" onclick="selectEmoji('😊', 'Feliz')">😊</div>
+            <div class="emoji-item" onclick="selectEmoji('😢', 'Triste')">😢</div>
+            <div class="emoji-item" onclick="selectEmoji('😡', 'Enojado')">😡</div>
+            <div class="emoji-item" onclick="selectEmoji('☁️', 'Ansioso')">☁️</div>
+            <div class="emoji-item" onclick="selectEmoji('💖', 'Amado')">💖</div>
+        </div>
+
+        <textarea id="diary-text" rows="4" placeholder="¿Por qué te sientes así?"></textarea>
+        
+        <button onclick="feedPet()">Alimentar Mascota 🍓</button>
+
+        <div class="sos-btn" onclick="triggerSOS()">🆘</div>
+    </div>
+
+</div>
+
+<script>
+    let userName = "";
+    let selectedEmoji = "";
+    let loveLevel = 0;
+    const pets = ["🐱", "🐰", "🦖", "🦄", "🐼"];
+    const chosenPet = pets[Math.floor(Math.random() * pets.length)];
+    
+    const phrases = [
+        "¡Eres una persona increíble!",
+        "Tu sonrisa ilumina mi código.",
+        "Todo estará bien, estoy contigo.",
+        "¡Eres más valiente de lo que crees!",
+        "¡Hoy es un día perfecto para ser feliz!"
+    ];
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function goToLink() {
+        userName = document.getElementById('username').value;
+        if(userName) showScreen('screen-link');
+        else alert("¡Por favor, dinos tu nombre!");
+    }
+
+    function startApp() {
+        const code = document.getElementById('partner-code').value;
+        if(code) {
+            alert("¡Vínculo establecido! Tu mascota ha nacido.");
+            showScreen('screen-main');
+            updatePhrase();
+        } else alert("Introduce el código de tu pareja.");
+    }
+
+    function selectEmoji(emoji, label) {
+        selectedEmoji = emoji;
+        document.querySelectorAll('.emoji-item').forEach(e => e.classList.remove('selected'));
+        event.target.classList.add('selected');
+    }
+
+    function updatePhrase() {
+        const p = phrases[Math.floor(Math.random() * phrases.length)];
+        document.getElementById('daily-phrase').innerText = `"${p}"`;
+    }
+
+    function feedPet() {
+        const text = document.getElementById('diary-text').value;
+        if(!selectedEmoji || !text) {
+            alert("Selecciona una emoción y escribe algo para tu mascota.");
+            return;
+        }
+
+        loveLevel += (text.length * 0.5) + 10;
+        document.getElementById('pet-level').innerText = Math.floor(loveLevel);
+        
+        // Evolución de la mascota
+        let sprite = "🐣";
+        let pName = "Huevo";
+        
+        if(loveLevel > 20) { sprite = chosenPet; pName = "Bebé " + chosenPet; }
+        if(loveLevel > 100) { sprite = chosenPet; pName = "Gran " + chosenPet + " Nivel Máximo"; }
+
+        document.getElementById('pet-sprite').innerText = sprite;
+        document.getElementById('pet-name').innerText = pName;
+
+        // Simulación de notificación a pareja
+        if(selectedEmoji === '😢' || selectedEmoji === '☁️') {
+            setTimeout(() => {
+                alert(`💌 MENSAJE PARA TU PAREJA:\n${userName} se siente ${selectedEmoji}. Consejo: Envíale un mensaje dulce o un abrazo virtual.`);
+            }, 500);
+        }
+
+        // Limpiar
+        document.getElementById('diary-text').value = "";
+        alert("¡Tu mascota ha comido tus emociones y ha crecido!");
+        updatePhrase();
+    }
+
+    function triggerSOS() {
+        alert("🚨 ALERTA SOS: Tu pareja ha recibido una notificación de emergencia. ¡La ayuda va en camino!");
+    }
+</script>
+
+</body>
+</html>

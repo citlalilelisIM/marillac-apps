@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Po's Night Shift</title>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: 'Courier New', monospace; overflow: hidden; }
+        
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+
+        /* Pantalla de Game Over */
+        #game-over {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: black; display: none; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        #game-over h1 { color: red; font-size: 70px; text-shadow: 0 0 15px red; }
+        #restart-btn {
+            padding: 15px 30px; background: red; color: white; border: none;
+            cursor: pointer; font-size: 20px; font-weight: bold; border-radius: 5px;
+        }
+
+        /* Botones de las Puertas */
+        .door-control {
+            position: absolute; bottom: 200px; width: 70px; height: 90px;
+            background: #222; border: 3px solid #444; z-index: 10;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+        }
+        #ctrl-left { left: 15%; }
+        #ctrl-right { right: 15%; }
+        
+        .red-button {
+            width: 40px; height: 40px; background: radial-gradient(#ff0000, #800000);
+            border-radius: 50%; cursor: pointer; border: 2px solid #000;
+        }
+        .red-button:active { transform: scale(0.9); }
+
+        /* Botón de Cámaras */
+        #cam-toggle {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 250px; height: 40px; background: rgba(50, 50, 50, 0.8);
+            border: 2px solid white; color: white; cursor: pointer; z-index: 100;
+            font-weight: bold; transition: 0.3s;
+        }
+        #cam-toggle:hover { background: white; color: black; }
+
+        /* Sistema de Cámaras */
+        #cam-system {
+            position: absolute; top: 10%; left: 10%; width: 80%; height: 70%;
+            background: #111; border: 5px solid #333; display: none;
+            grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; padding: 15px; z-index: 50;
+        }
+        .cam-view { 
+            background: #050505; border: 2px solid #222; position: relative; 
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+        .cam-label { position: absolute; top: 5px; left: 5px; color: #0f0; font-size: 14px; background: rgba(0,0,0,0.5); }
+        .po-vision { width: 60px; height: 60px; background: red; border-radius: 50%; filter: blur(10px); display: none; }
+
+        #clock { position: absolute; top: 20px; right: 20px; font-size: 32px; z-index: 10; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="clock">12:00 AM</div>
+
+    <div id="ctrl-left" class="door-control">
+        <span>IZQ</span>
+        <div class="red-button" onclick="toggleDoor('left')"></div>
+    </div>
+    <div id="ctrl-right" class="door-control">
+        <span>DER</span>
+        <div class="red-button" onclick="toggleDoor('right')"></div>
+    </div>
+
+    <button id="cam-toggle" onclick="toggleCams()">MONITOR DE SEGURIDAD</button>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="cam-system">
+        <div class="cam-view"><span class="cam-label">CAM 1: COMEDOR</span><div id="po-cam-0" class="po-vision"></div></div>
+        <div class="cam-view"><span class="cam-label">CAM 2: ARCADE</span><div id="po-cam-1" class="po-vision"></div></div>
+        <div class="cam-view"><span class="cam-label">CAM 3: PASILLO IZQ</span><div id="po-cam-2" class="po-vision"></div></div>
+        <div class="cam-view"><span class="cam-label">CAM 4: PASILLO DER</span><div id="po-cam-3" class="po-vision"></div></div>
+    </div>
+
+    <div id="game-over">
+        <h1>PO TE ENCONTRÓ</h1>
+        <button id="restart-btn" onclick="location.reload()">REINICIAR NOCHE</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const camSystem = document.getElementById('cam-system');
+    const clockEl = document.getElementById('clock');
+    
+    // Configuración
+    canvas.width = 2000; // Oficina ancha para scroll
+    canvas.height = window.innerHeight;
+
+    let mouseX = window.innerWidth / 2;
+    let cameraX = 0;
+    let doorLeft = false;
+    let doorRight = false;
+    let camsOpen = false;
+    let gameActive = true;
+    let hour = 0;
+
+    // IA de Po
+    // Posiciones: 0: Comedor, 1: Arcade, 2: Pasillo Izq, 3: Pasillo Der, 4: Puerta Izq, 5: Puerta Der
+    let poPos = 0;
+
+    // Movimiento de la cámara con el mouse
+    window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+    });
+
+    function toggleCams() {
+        if (!gameActive) return;
+        camsOpen = !camsOpen;
+        camSystem.style.display = camsOpen ? 'grid' : 'none';
+    }
+
+    function toggleDoor(side) {
+        if (!gameActive) return;
+        if (side === 'left') doorLeft = !doorLeft;
+        if (side === 'right') doorRight = !doorRight;
+    }
+
+    // Lógica de movimiento de Po
+    function movePo() {
+        if (!gameActive) return;
+
+        if (poPos < 2) {
+            poPos++; // De comedor a arcade, de arcade a pasillos
+        } else if (poPos === 2 || poPos === 3) {
+            // De pasillos a puertas
+            poPos = (poPos === 2) ? 4 : 5;
+        } else {
+            // Si está en la puerta y no está cerrada, perdemos
+            if ((poPos === 4 && !doorLeft) || (poPos === 5 && !doorRight)) {
+                endGame();
+                return;
+            } else {
+                // Si la puerta está cerrada, retrocede
+                poPos = Math.floor(Math.random() * 2); 
+            }
+        }
+        updateCamVisuals();
+        setTimeout(movePo, 5000 + Math.random() * 5000);
+    }
+
+    function updateCamVisuals() {
+        for(let i=0; i<4; i++) {
+            document.getElementById(`po-cam-${i}`).style.display = (poPos === i) ? 'block' : 'none';
+        }
+    }
+
+    function endGame() {
+        gameActive = false;
+        document.getElementById('game-over').style.display = 'flex';
+    }
+
+    // Reloj
+    setInterval(() => {
+        if (!gameActive) return;
+        hour++;
+        clockEl.innerText = (hour === 6) ? "06:00 AM" : `0${hour}:00 AM`;
+        if (hour === 6) {
+            alert("¡Sobreviviste!");
+            location.reload();
+        }
+    }, 45000);
+
+    // Bucle de dibujo
+    function draw() {
+        // Scroll de pantalla suave
+        let targetX = -(mouseX / window.innerWidth) * (canvas.width - window.innerWidth);
+        cameraX += (targetX - cameraX) * 0.08;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(cameraX, 0);
+
+        // Dibujar Oficina
+        ctx.fillStyle = "#151515";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Marcos de puertas
+        ctx.fillStyle = "#000";
+        ctx.fillRect(300, 100, 400, canvas.height - 200); // Puerta Izq
+        ctx.fillRect(1300, 100, 400, canvas.height - 200); // Puerta Der
+
+        // Dibujar a Po si está en la puerta
+        if (!doorLeft && poPos === 4) {
+            drawPo(500);
+        }
+        if (!doorRight && poPos === 5) {
+            drawPo(1500);
+        }
+
+        // Puertas físicas
+        ctx.fillStyle = "#333";
+        if (doorLeft) ctx.fillRect(300, 100, 400, canvas.height - 200);
+        if (doorRight) ctx.fillRect(1300, 100, 400, canvas.height - 200);
+
+        // Detalles de escritorio
+        ctx.fillStyle = "#222";
+        ctx.fillRect(800, canvas.height - 250, 400, 250);
+
+        ctx.restore();
+
+        // Efecto de estática
+        if (camsOpen) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.05})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    function drawPo(x) {
+        ctx.fillStyle = "red";
+        // Cuerpo
+        ctx.beginPath();
+        ctx.arc(x, canvas.height/2 + 50, 100, 0, Math.PI*2);
+        ctx.fill();
+        // Cabeza
+        ctx.beginPath();
+        ctx.arc(x, canvas.height/2 - 80, 70, 0, Math.PI*2);
+        ctx.fill();
+        // Antena (Círculo de Po)
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(x, canvas.height/2 - 190, 30, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillRect(x - 4, canvas.height/2 - 160, 8, 30);
+        // Ojos brillantes
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(x - 20, canvas.height/2 - 80, 10, 0, Math.PI*2);
+        ctx.arc(x + 20, canvas.height/2 - 80, 10, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    setTimeout(movePo, 3000);
+    draw();
+</script>
+</body>
+</html>

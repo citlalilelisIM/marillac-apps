@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello Kitty: Bow Strike</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0d0015;
+            color: #ff74c1;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #ff74c1;
+            box-shadow: 0 0 25px #ff74c1;
+        }
+
+        canvas {
+            display: block;
+            background: radial-gradient(circle, #2d0a3d 0%, #0d0015 100%);
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px; left: 10px; right: 10px;
+            display: flex; justify-content: space-between;
+            font-size: 18px; font-weight: bold;
+            text-shadow: 0 0 8px #ff74c1;
+            pointer-events: none;
+        }
+
+        #overlay {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 10;
+        }
+
+        button {
+            background: transparent; border: 2px solid #ff74c1;
+            color: #ff74c1; padding: 10px 30px;
+            font-size: 20px; cursor: pointer; margin-top: 20px;
+        }
+        button:hover { background: #ff74c1; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui">
+        <div>PUNTOS: <span id="score">0</span></div>
+        <div>OLEADA: <span id="wave">1</span></div>
+        <div>VIDAS: <span id="lives">3</span></div>
+    </div>
+    
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="overlay">
+        <h1>¡GAME OVER!</h1>
+        <p id="final-score">Puntuación: 0</p>
+        <button onclick="resetGame()">REINTENTAR</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 600;
+    canvas.height = 700;
+
+    let score, lives, wave, gameActive;
+    let player, bullets, enemies, keys;
+
+    class Player {
+        constructor() {
+            this.w = 60; this.h = 80;
+            this.x = canvas.width / 2 - this.w / 2;
+            this.y = canvas.height - 100;
+            this.baseY = canvas.height - 100;
+            this.speed = 8; this.vy = 0;
+            this.gravity = 0.8; this.jumpPower = -16;
+            this.isJumping = false;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.shadowBlur = 10; ctx.shadowColor = "#ff74c1";
+
+            // CUERPO (Overol)
+            ctx.fillStyle = "#ff74c1";
+            ctx.beginPath();
+            ctx.roundRect(15, 45, 30, 30, 10);
+            ctx.fill();
+            ctx.strokeStyle = "white"; ctx.stroke();
+
+            // CABEZA
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.ellipse(30, 30, 28, 22, 0, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+
+            // OREJAS
+            ctx.beginPath();
+            ctx.moveTo(10, 15); ctx.lineTo(15, 2); ctx.lineTo(25, 12);
+            ctx.moveTo(50, 15); ctx.lineTo(45, 2); ctx.lineTo(35, 12);
+            ctx.stroke();
+
+            // MOÑO
+            ctx.fillStyle = "#ff0055";
+            ctx.beginPath(); ctx.arc(45, 12, 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+            // CARA
+            ctx.fillStyle = "black";
+            ctx.beginPath(); ctx.arc(20, 32, 2, 0, Math.PI*2); ctx.fill(); // Ojo
+            ctx.beginPath(); ctx.arc(40, 32, 2, 0, Math.PI*2); ctx.fill(); // Ojo
+            ctx.fillStyle = "yellow";
+            ctx.beginPath(); ctx.ellipse(30, 38, 3, 2, 0, 0, Math.PI*2); ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            if ((keys['ArrowLeft'] || keys['a']) && this.x > 0) this.x -= this.speed;
+            if ((keys['ArrowRight'] || keys['d']) && this.x < canvas.width - this.w) this.x += this.speed;
+            if ((keys['w'] || keys['ArrowUp']) && !this.isJumping) {
+                this.vy = this.jumpPower; this.isJumping = true;
+            }
+            this.y += this.vy; this.vy += this.gravity;
+            if (this.y > this.baseY) { this.y = this.baseY; this.vy = 0; this.isJumping = false; }
+        }
+    }
+
+    class Enemy { // MOÑOS ENEMIGOS
+        constructor(x, y, speed) {
+            this.x = x; this.y = y; this.w = 40; this.h = 25;
+            this.speed = speed;
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.shadowBlur = 15; ctx.shadowColor = "#00fff2";
+            ctx.fillStyle = "#00fff2";
+            ctx.strokeStyle = "white";
+            
+            // Dibujar un moño (dos triángulos y un círculo)
+            ctx.beginPath();
+            ctx.moveTo(0,0); ctx.lineTo(15, 12.5); ctx.lineTo(0, 25); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(40,0); ctx.lineTo(25, 12.5); ctx.lineTo(40, 25); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(20, 12.5, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+        update() { this.y += this.speed; }
+    }
+
+    class Bullet {
+        constructor(x, y) { this.x = x; this.y = y; this.speed = 12; }
+        draw() {
+            ctx.fillStyle = "#fff"; ctx.shadowBlur = 10; ctx.shadowColor = "#fff";
+            ctx.font = "20px Arial"; ctx.fillText("💖", this.x - 10, this.y);
+        }
+        update() { this.y -= this.speed; }
+    }
+
+    function init() {
+        score = 0; lives = 3; wave = 1; gameActive = true;
+        player = new Player(); bullets = []; enemies = []; keys = {};
+        document.getElementById('overlay').style.display = 'none';
+        spawnWave(); animate();
+    }
+
+    function spawnWave() {
+        let count = 5 + wave;
+        let speed = 2 + (wave * 0.3);
+        for(let i = 0; i < count; i++) {
+            enemies.push(new Enemy(Math.random() * (canvas.width - 40), -Math.random() * 800, speed));
+        }
+        document.getElementById('wave').innerText = wave;
+    }
+
+    window.addEventListener('keydown', e => {
+        keys[e.key] = true;
+        if(e.key === ' ' && gameActive) bullets.push(new Bullet(player.x + player.w/2, player.y));
+    });
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    function animate() {
+        if(!gameActive) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        player.update(); player.draw();
+
+        bullets.forEach((b, bi) => {
+            b.update(); b.draw();
+            if(b.y < 0) bullets.splice(bi, 1);
+        });
+
+        enemies.forEach((e, ei) => {
+            e.update(); e.draw();
+            // Colisión
+            if (e.x < player.x + player.w && e.x + e.w > player.x && e.y < player.y + player.h && e.y + e.h > player.y) {
+                enemies.splice(ei, 1); lives--;
+                document.getElementById('lives').innerText = lives;
+                if(lives <= 0) gameOver();
+            }
+            // Impacto bala
+            bullets.forEach((b, bi) => {
+                if(b.x > e.x && b.x < e.x + e.w && b.y > e.y && b.y < e.y + e.h) {
+                    enemies.splice(ei, 1); bullets.splice(bi, 1);
+                    score += 100; document.getElementById('score').innerText = score;
+                }
+            });
+            if(e.y > canvas.height) { enemies.splice(ei, 1); lives--; document.getElementById('lives').innerText = lives; if(lives <= 0) gameOver(); }
+        });
+
+        if(enemies.length === 0) { wave++; spawnWave(); }
+        requestAnimationFrame(animate);
+    }
+
+    function gameOver() {
+        gameActive = false;
+        document.getElementById('overlay').style.display = 'flex';
+        document.getElementById('final-score').innerText = `Puntuación: ${score}`;
+    }
+
+    function resetGame() { init(); }
+    init();
+</script>
+</body>
+</html>

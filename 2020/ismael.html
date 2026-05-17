@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade: Esquiva o Muere</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #444;
+        }
+
+        canvas {
+            background-color: #bbb; /* Fondo Gris */
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-weight: bold;
+            font-size: 20px;
+            color: #333;
+            pointer-events: none;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background: #ff4d4d;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover { background: #cc0000; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui">TIEMPO: <span id="timer">0.00</span>s</div>
+    
+    <div id="game-over">
+        <h1 style="color: #ff4d4d;">¡GAME OVER!</h1>
+        <p id="final-time" style="font-size: 24px;"></p>
+        <button onclick="resetGame()">REINTENTAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const timerEl = document.getElementById('timer');
+    const gameOverScreen = document.getElementById('game-over');
+    const finalTimeEl = document.getElementById('final-time');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let player, obstacles, lasers, keys, startTime, gameActive;
+
+    function init() {
+        player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 12,
+            speed: 5,
+            color: 'red'
+        };
+        obstacles = [];
+        lasers = [];
+        keys = {};
+        startTime = Date.now();
+        gameActive = true;
+        gameOverScreen.style.display = 'none';
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function spawnObstacle(difficulty) {
+        const size = 20 + Math.random() * 30;
+        const side = Math.floor(Math.random() * 4);
+        let x, y, vx, vy;
+
+        const speedMult = 2 + (difficulty * 0.5);
+
+        if (side === 0) { x = -size; y = Math.random() * canvas.height; vx = speedMult; vy = 0; }
+        else if (side === 1) { x = canvas.width + size; y = Math.random() * canvas.height; vx = -speedMult; vy = 0; }
+        else if (side === 2) { x = Math.random() * canvas.width; y = -size; vx = 0; vy = speedMult; }
+        else { x = Math.random() * canvas.width; y = canvas.height + size; vx = 0; vy = -speedMult; }
+
+        obstacles.push({ x, y, size, vx, vy });
+    }
+
+    function spawnLaser() {
+        const isHorizontal = Math.random() > 0.5;
+        lasers.push({
+            isHorizontal: isHorizontal,
+            pos: isHorizontal ? Math.random() * canvas.height : Math.random() * canvas.width,
+            timer: 60, // 1 segundo a 60fps
+            active: false,
+            duration: 20 // Cuánto tiempo dura el disparo
+        });
+    }
+
+    function update() {
+        if (!gameActive) return;
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        timerEl.innerText = elapsed.toFixed(2);
+        const difficulty = Math.floor(elapsed / 5); // Aumenta cada 5 segundos
+
+        // Movimiento WASD
+        if (keys['KeyW'] && player.y > player.radius) player.y -= player.speed;
+        if (keys['KeyS'] && player.y < canvas.height - player.radius) player.y += player.speed;
+        if (keys['KeyA'] && player.x > player.radius) player.x -= player.speed;
+        if (keys['KeyD'] && player.x < canvas.width - player.radius) player.x += player.speed;
+
+        // Spawn de obstáculos (más frecuente con el tiempo)
+        if (Math.random() < 0.03 + (elapsed * 0.002)) spawnObstacle(difficulty);
+
+        // Spawn de láseres (más frecuente con el tiempo)
+        if (Math.random() < 0.005 + (elapsed * 0.0005)) spawnLaser();
+
+        // Actualizar Obstáculos
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let o = obstacles[i];
+            o.x += o.vx;
+            o.y += o.vy;
+
+            // Colisión Círculo - Cuadrado
+            let closeX = Math.max(o.x, Math.min(player.x, o.x + o.size));
+            let closeY = Math.max(o.y, Math.min(player.y, o.y + o.size));
+            let dist = Math.hypot(player.x - closeX, player.y - closeY);
+
+            if (dist < player.radius) endGame(elapsed);
+            if (o.x < -100 || o.x > canvas.width + 100 || o.y < -100 || o.y > canvas.height + 100) obstacles.splice(i, 1);
+        }
+
+        // Actualizar Láseres
+        for (let i = lasers.length - 1; i >= 0; i--) {
+            let l = lasers[i];
+            l.timer--;
+
+            if (l.timer <= 0) {
+                l.active = true;
+                l.duration--;
+
+                // Colisión con láser activo
+                if (l.duration > 0) {
+                    if (l.isHorizontal) {
+                        if (Math.abs(player.y - l.pos) < player.radius + 5) endGame(elapsed);
+                    } else {
+                        if (Math.abs(player.x - l.pos) < player.radius + 5) endGame(elapsed);
+                    }
+                } else {
+                    lasers.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar Láseres (Advertencia y Activo)
+        lasers.forEach(l => {
+            if (!l.active) {
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+            } else {
+                ctx.strokeStyle = '#fff';
+                ctx.setLineDash([]);
+                ctx.lineWidth = 15;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "red";
+            }
+            
+            ctx.beginPath();
+            if (l.isHorizontal) {
+                ctx.moveTo(0, l.pos); ctx.lineTo(canvas.width, l.pos);
+            } else {
+                ctx.moveTo(l.pos, 0); ctx.lineTo(l.pos, canvas.height);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        });
+
+        // Dibujar Jugador
+        ctx.fillStyle = player.color;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dibujar Obstáculos
+        ctx.fillStyle = 'blue';
+        obstacles.forEach(o => {
+            ctx.fillRect(o.x, o.y, o.size, o.size);
+        });
+    }
+
+    function endGame(time) {
+        gameActive = false;
+        finalTimeEl.innerText = `Tiempo: ${time.toFixed(2)} segundos`;
+        gameOverScreen.style.display = 'flex';
+    }
+
+    function resetGame() {
+        init();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        if (gameActive) requestAnimationFrame(gameLoop);
+    }
+
+    init();
+    gameLoop();
+</script>
+
+</body>
+</html>

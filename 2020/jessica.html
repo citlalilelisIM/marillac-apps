@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hámster Zen Kawaii</title>
+    <style>
+        :root {
+            --rosa-pastel: #ffdeeb;
+            --hamster-cafe: #b37e51;
+            --rosa-claro: #ffebee; /* Orejas y nariz */
+            --texto: #8d6e63;
+            --blanco: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--rosa-pastel);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: var(--texto);
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.4);
+            padding: 25px;
+            border-radius: 40px;
+            width: 85%;
+            max-width: 380px;
+            border: 4px solid var(--blanco);
+            box-shadow: 0 10px 30px rgba(255, 182, 193, 0.3);
+        }
+
+        /* --- ESTILO KAWAII DEL HÁMSTER --- */
+        .stage {
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .hamster {
+            position: relative;
+            width: 120px;
+            height: 100px;
+            background-color: var(--hamster-cafe);
+            border-radius: 50% 50% 45% 45%;
+            transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+        }
+
+        /* Orejas */
+        .ear {
+            position: absolute;
+            top: -10px;
+            width: 35px;
+            height: 35px;
+            background-color: var(--hamster-cafe);
+            border-radius: 50%;
+            z-index: -1;
+        }
+        .ear.left { left: 10px; }
+        .ear.right { right: 10px; }
+        .ear::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background-color: var(--rosa-claro);
+            border-radius: 50%;
+            top: 6px;
+            left: 6px;
+        }
+
+        /* Cara */
+        .eye {
+            position: absolute;
+            top: 40px;
+            width: 12px;
+            height: 12px;
+            background: #333;
+            border-radius: 50%;
+        }
+        .eye::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+        }
+        .eye.left { left: 30px; }
+        .eye.right { right: 30px; }
+
+        .nose {
+            position: absolute;
+            top: 55px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14px;
+            height: 10px;
+            background-color: var(--rosa-claro);
+            border-radius: 50%;
+        }
+
+        .cheek {
+            position: absolute;
+            top: 58px;
+            width: 22px;
+            height: 12px;
+            background: rgba(255, 150, 180, 0.4);
+            border-radius: 50%;
+        }
+        .cheek.left { left: 15px; }
+        .cheek.right { right: 15px; }
+
+        /* --- ANIMACIONES --- */
+        @keyframes jump {
+            0%, 100% { transform: scale(var(--s)) translateY(0); }
+            50% { transform: scale(var(--s)) translateY(-40px); }
+        }
+        .anim-jump { animation: jump 0.5s ease; }
+
+        @keyframes eat {
+            0%, 100% { transform: scale(var(--s)); }
+            50% { transform: scale(calc(var(--s) * 1.1)); }
+        }
+        .anim-eat { animation: eat 0.3s ease 3; }
+
+        /* --- UI CONTROLES --- */
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        button {
+            background: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 20px;
+            color: var(--texto);
+            font-weight: bold;
+            box-shadow: 0 4px 0 #ffc1d6;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #ffc1d6;
+        }
+
+        #bubble {
+            background: white;
+            padding: 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            min-height: 40px;
+            position: relative;
+            margin-top: 10px;
+        }
+
+        .stat-bar {
+            font-size: 0.85rem;
+            margin: 5px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="stat-bar">🕒 Tiempo desconectado: <span id="mins">0</span> min</div>
+    <div class="stat-bar">📏 Tamaño actual: <span id="size">12</span> cm</div>
+
+    <div class="stage">
+        <div id="pet" class="hamster" style="--s: 1;">
+            <div class="ear left"></div>
+            <div class="ear right"></div>
+            <div class="eye left"></div>
+            <div class="eye right"></div>
+            <div class="nose"></div>
+            <div class="cheek left"></div>
+            <div class="cheek right"></div>
+        </div>
+    </div>
+
+    <div id="bubble">"¡Hola! Bloquea tu celular para que pueda crecer mucho."</div>
+
+    <div class="buttons">
+        <button onclick="playWithPet()">🎾 Jugar</button>
+        <button onclick="feedPet()">🌻 Alimentar</button>
+    </div>
+</div>
+
+<script>
+    let startTime;
+    let totalMins = parseInt(localStorage.getItem('h_mins')) || 0;
+    let baseSize = 12; // Tamaño inicial en cm
+    
+    const phrases = [
+        "¡Me siento increíble! Gracias por este tiempo.",
+        "Tus ojos descansan, yo crezco feliz.",
+        "¿Viste lo grande que estoy? ¡Es por tu esfuerzo!",
+        "La vida fuera de la pantalla es maravillosa.",
+        "¡Sigue así! Cada minuto cuenta para mi salud.",
+        "¡Mírame! He crecido mucho gracias a tu enfoque."
+    ];
+
+    function updateStats(addedMins = 0) {
+        if (addedMins > 0) {
+            totalMins += addedMins;
+            localStorage.setItem('h_mins', totalMins);
+        }
+        
+        // Cada minuto son 5 cm adicionales
+        let currentCm = baseSize + (totalMins * 5);
+        document.getElementById('mins').innerText = totalMins;
+        document.getElementById('size').innerText = currentCm;
+
+        // Escala visual: 12cm es escala 1. Cada 5cm sube 0.1 de escala
+        let visualScale = 1 + (totalMins * 0.1);
+        if (visualScale > 2.5) visualScale = 2.5; // Límite para no desbordar
+        
+        const pet = document.getElementById('pet');
+        pet.style.setProperty('--s', visualScale);
+        pet.style.transform = `scale(${visualScale})`;
+    }
+
+    function playWithPet() {
+        const pet = document.getElementById('pet');
+        pet.classList.remove('anim-jump');
+        void pet.offsetWidth; // Reset animation
+        pet.classList.add('anim-jump');
+        document.getElementById('bubble').innerText = "¡Wiiii! ¡Esto es muy divertido!";
+    }
+
+    function feedPet() {
+        const pet = document.getElementById('pet');
+        pet.classList.remove('anim-eat');
+        void pet.offsetWidth; 
+        pet.classList.add('anim-eat');
+        document.getElementById('bubble').innerText = "¡Ñam ñam! Estas semillas están ricas.";
+    }
+
+    // Detector de bienestar digital
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            // Usuario bloquea el celular o sale de la pestaña
+            startTime = new Date();
+        } else {
+            // Usuario regresa a la app
+            if (startTime) {
+                const endTime = new Date();
+                const diff = Math.floor((endTime - startTime) / 60000); // Diferencia en minutos
+
+                if (diff >= 1) {
+                    updateStats(diff);
+                    const randomMsg = phrases[Math.floor(Math.random() * phrases.length)];
+                    document.getElementById('bubble').innerText = `¡Estuviste fuera ${diff} min! ${randomMsg}`;
+                    playWithPet(); // Salta de alegría al verte
+                } else {
+                    document.getElementById('bubble').innerText = "¡Has vuelto! Intenta aguantar al menos 1 minuto para que crezca.";
+                }
+                startTime = null;
+            }
+        }
+    });
+
+    // Iniciar con datos guardados
+    updateStats();
+</script>
+
+</body>
+</html>

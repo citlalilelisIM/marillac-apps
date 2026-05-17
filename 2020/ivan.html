@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>F1 Grand Prix - Curvas Peligrosas</title>
+    <style>
+        body { 
+            margin: 0; background: #1a1a1a; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 100vh; overflow: hidden; color: #fff; font-family: 'Arial', sans-serif; 
+        }
+        canvas { 
+            border: 5px solid #ff4757; background: #222;
+            box-shadow: 0 0 50px rgba(255, 71, 87, 0.3);
+        }
+        .ui { position: absolute; top: 20px; font-size: 24px; font-weight: bold; text-align: center; width: 100%; color: #ff4757; }
+        #gameOver {
+            display: none; position: absolute; background: rgba(0,0,0,0.95);
+            padding: 40px; border: 4px solid #ff4757; text-align: center; z-index: 10;
+        }
+        button {
+            background: #ff4757; color: white; border: none;
+            padding: 15px 30px; cursor: pointer; font-size: 18px; margin-top: 15px; border-radius: 4px;
+        }
+        .warning { color: #f1c40f; font-size: 18px; display: block; margin-top: 5px; min-height: 22px; }
+    </style>
+</head>
+<body>
+
+    <div class="ui">
+        PUNTOS: <span id="score">0</span> | VEL: <span id="speedDisplay">0</span> km/h
+        <div id="curveWarning" class="warning"></div>
+    </div>
+
+    <canvas id="raceCanvas"></canvas>
+
+    <div id="gameOver">
+        <h1 style="color: #ff4757;">¡FUERA DE PISTA!</h1>
+        <p>RECORRIDO TOTAL: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">REINTENTAR</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('raceCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const speedEl = document.getElementById('speedDisplay');
+    const warningEl = document.getElementById('curveWarning');
+    const finalScoreEl = document.getElementById('finalScore');
+    const gameOverScreen = document.getElementById('gameOver');
+
+    canvas.width = 600; 
+    canvas.height = 750;
+
+    let score = 0;
+    let baseSpeed = 12;
+    let currentSpeed = 12;
+    let gameActive = true;
+    let traffic = [];
+    let lineOffset = 0;
+
+    // LÓGICA DE CURVAS
+    let curveAmount = 0; // Fuerza de la curva actual
+    let targetCurve = 0; // Hacia dónde tiende la curva
+    let curveTimer = 0;
+
+    const f1 = {
+        x: 275, y: 600, w: 45, h: 85,
+        color: '#ff4757',
+        targetX: 275
+    };
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function drawF1(x, y, braking) {
+        ctx.save();
+        // Inclinación visual según la curva
+        ctx.translate(x + 22, y + 42);
+        ctx.rotate(curveAmount * 0.05);
+        ctx.translate(-(x + 22), -(y + 42));
+
+        // Cuerpo F1
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x - 5, y + 65, 55, 12); // Alerón
+        ctx.fillStyle = f1.color;
+        ctx.fillRect(x + 5, y + 20, 35, 60); // Chasis
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 10, y + 12, 12, 20); // Ruedas
+        ctx.fillRect(x + 43, y + 12, 12, 20);
+        ctx.fillRect(x - 12, y + 60, 14, 22);
+        ctx.fillRect(x + 43, y + 60, 14, 22);
+        ctx.fillStyle = '#fffa65';
+        ctx.beginPath(); ctx.arc(x + 22, y + 40, 7, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+
+    function drawUrbanCar(x, y, color) {
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 55, 90);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(x + 5, y + 20, 45, 45);
+        ctx.restore();
+    }
+
+    function createTraffic() {
+        if (!gameActive) return;
+        const lanes = [50, 160, 270, 380, 490];
+        const laneX = lanes[Math.floor(Math.random() * lanes.length)];
+        traffic.push({
+            x: laneX, y: -150, w: 55, h: 90,
+            color: ['#3498db', '#f1c40f', '#2ecc71'][Math.floor(Math.random()*3)]
+        });
+        setTimeout(createTraffic, Math.max(200, 800 - (score * 0.5)));
+    }
+
+    function handleCurves() {
+        // Cada 3000 puntos (3km sim) se activa una curva
+        if (score > 0 && score % 3000 < 500 && targetCurve === 0) {
+            targetCurve = Math.random() > 0.5 ? 4 : -4; // Dirección de la curva
+            warningEl.innerText = targetCurve > 0 ? "¡CURVA A LA DERECHA!" : "¡CURVA A LA IZQUIERDA!";
+            setTimeout(() => { 
+                targetCurve = 0; 
+                warningEl.innerText = "";
+            }, 5000); // La curva dura 5 segundos
+        }
+        
+        // Transición suave de la curva
+        curveAmount += (targetCurve - curveAmount) * 0.02;
+    }
+
+    function resetGame() {
+        score = 0; baseSpeed = 12; traffic = []; gameActive = true;
+        curveAmount = 0; targetCurve = 0;
+        gameOverScreen.style.display = 'none';
+        f1.x = 275; f1.targetX = 275;
+        update();
+    }
+
+    function update() {
+        if (!gameActive) return;
+
+        handleCurves();
+
+        let braking = keys['ArrowDown'];
+        currentSpeed = braking ? baseSpeed * 0.4 : baseSpeed;
+        speedEl.innerText = Math.floor(currentSpeed * 20);
+
+        // Fondo y Líneas con efecto de curva
+        ctx.fillStyle = '#2f3542';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        lineOffset += currentSpeed;
+        if (lineOffset > 60) lineOffset = 0;
+        
+        ctx.save();
+        ctx.strokeStyle = '#f1f2f6';
+        ctx.setLineDash([40, 20]);
+        ctx.lineWidth = 4;
+        ctx.lineDashOffset = -lineOffset;
+
+        // Dibujar líneas moviéndose por la curva
+        for(let i = 1; i < 5; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * 120 + (curveAmount * 10), 0);
+            ctx.bezierCurveTo(
+                i * 120 + (curveAmount * 50), 375, 
+                i * 120, 750, 
+                i * 120, 750
+            );
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // Aplicar fuerza de la curva al jugador (lo empuja hacia afuera)
+        f1.targetX -= curveAmount * 0.8;
+        
+        // Mantener dentro de la pista
+        if(f1.targetX < 10) f1.targetX = 10;
+        if(f1.targetX > 540) f1.targetX = 540;
+
+        f1.x += (f1.targetX - f1.x) * 0.2;
+        drawF1(f1.x, f1.y, braking);
+
+        traffic.forEach((car, i) => {
+            car.y += currentSpeed;
+            // El tráfico también se ve afectado visualmente por la curva
+            car.x -= curveAmount * 0.5; 
+
+            drawUrbanCar(car.x, car.y, car.color);
+
+            if (f1.x < car.x + car.w - 5 && f1.x + f1.w > car.x + 5 && 
+                f1.y < car.y + car.h - 5 && f1.y + f1.h > car.y + 5) {
+                gameActive = false;
+                finalScoreEl.innerText = score;
+                gameOverScreen.style.display = 'block';
+            }
+
+            if (car.y > canvas.height) {
+                traffic.splice(i, 1);
+                score += 100; // Incremento para llegar rápido a los 3km
+                scoreEl.innerText = score;
+                baseSpeed += 0.05;
+            }
+        });
+
+        requestAnimationFrame(update);
+    }
+
+    window.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft' && f1.targetX > 50) f1.targetX -= 110;
+        if (e.key === 'ArrowRight' && f1.targetX < 450) f1.targetX += 110;
+    });
+
+    createTraffic();
+    update();
+</script>
+</body>
+</html>

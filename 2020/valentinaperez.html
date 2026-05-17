@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organizador Semanal Estético</title>
+    <style>
+        :root {
+            --primary: #a29bfe;
+            --bg: #fdfdfd;
+            --card-bg: #ffffff;
+            --text-main: #4b4b4b;
+            --border: #f0f0f0;
+            --success: #55efc4;
+            /* Colores suaves por día */
+            --c1: #e1f5fe; --c2: #fce4ec; --c3: #f3e5f5; 
+            --c4: #fff9c4; --c5: #e8f5e9; --c6: #ffe0b2; --c7: #f5f5f5;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 { font-weight: 300; letter-spacing: 1px; margin-bottom: 5px; }
+
+        #quote-display {
+            font-size: 0.9rem;
+            color: var(--primary);
+            font-weight: 500;
+            min-height: 20px;
+            transition: all 0.3s;
+        }
+
+        /* Panel de entrada - Minimalista */
+        .input-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.03);
+            max-width: 950px;
+            margin: 0 auto 40px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: flex-end;
+            justify-content: center;
+            border: 1px solid var(--border);
+        }
+
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 0.75rem; font-weight: 700; color: #95a5a6; text-transform: uppercase; }
+
+        input, select, .btn-add {
+            padding: 12px;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            outline: none;
+            font-family: inherit;
+            transition: 0.2s;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        .btn-add {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            padding: 12px 30px;
+        }
+
+        .btn-add:hover { filter: brightness(1.05); transform: translateY(-1px); }
+
+        /* Grid de la Semana */
+        .

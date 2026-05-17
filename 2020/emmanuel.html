@@ -1,0 +1,362 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galactic Defender - Arcade</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #000000, #0a0a2a);
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            width: calc(100% - 20px);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            text-shadow: 2px 2px #000;
+        }
+
+        #message-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border: 2px solid #0ff;
+            display: none;
+        }
+
+        h1 { margin: 0; color: #0ff; }
+        button {
+            background: #0ff;
+            border: none;
+            padding: 10px 20px;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        button:hover { background: #fff; }
+
+        .controls-hint {
+            margin-top: 10px;
+            color: #888;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="ui-layer">
+            <div class="stats">
+                <div>PUNTOS: <span id="score">0</span></div>
+                <div>OLEADA: <span id="wave">1</span></div>
+                <div>VIDAS: <span id="lives">3</span></div>
+            </div>
+        </div>
+        <div id="message-overlay">
+            <h1 id="msg-title">GALACTIC DEFENDER</h1>
+            <p id="msg-text">Presiona el botón para comenzar</p>
+            <button id="start-btn">EMPEZAR JUEGO</button>
+        </div>
+    </div>
+
+    <div class="controls-hint">FLECHAS / WASD para mover | ESPACIO para disparar</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const waveEl = document.getElementById('wave');
+        const livesEl = document.getElementById('lives');
+        const overlay = document.getElementById('message-overlay');
+        const msgTitle = document.getElementById('msg-title');
+        const msgText = document.getElementById('msg-text');
+        const startBtn = document.getElementById('start-btn');
+
+        // Configuración
+        canvas.width = 600;
+        canvas.height = 700;
+
+        let gameRunning = false;
+        let score = 0;
+        let wave = 1;
+        let lives = 3;
+        let enemies = [];
+        let bullets = [];
+        let particles = [];
+        let keys = {};
+
+        // Clase Nave Jugador
+        const player = {
+            x: canvas.width / 2 - 20,
+            y: canvas.height - 60,
+            w: 40,
+            h: 40,
+            speed: 5,
+            color: '#0ff',
+            draw() {
+                ctx.fillStyle = this.color;
+                // Dibujar nave triangular estilizada
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.w / 2, this.y);
+                ctx.lineTo(this.x, this.y + this.h);
+                ctx.lineTo(this.x + this.w, this.y + this.h);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Motor/Brillo
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + this.w/2 - 2, this.y + this.h, 4, 5);
+            },
+            update() {
+                if ((keys['ArrowLeft'] || keys['a']) && this.x > 0) this.x -= this.speed;
+                if ((keys['ArrowRight'] || keys['d']) && this.x < canvas.width - this.w) this.x += this.speed;
+                if ((keys['ArrowUp'] || keys['w']) && this.y > 0) this.y -= this.speed;
+                if ((keys['ArrowDown'] || keys['s']) && this.y < canvas.height - this.h) this.y += this.speed;
+            }
+        };
+
+        // Clase Enemigo
+        class Enemy {
+            constructor(x, y, speed, health) {
+                this.x = x;
+                this.y = y;
+                this.w = 30;
+                this.h = 30;
+                this.speed = speed;
+                this.health = health;
+                this.color = `hsl(${Math.random() * 50 + 340}, 80%, 60%)`;
+                this.offset = Math.random() * Math.PI * 2; // Para movimiento senoidal
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+                // Ojos
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x + 5, this.y + 5, 5, 5);
+                ctx.fillRect(this.x + 20, this.y + 5, 5, 5);
+            }
+            update() {
+                this.y += this.speed;
+                this.x += Math.sin(this.y / 50 + this.offset) * 2;
+            }
+        }
+
+        // Clase Proyectil
+        class Bullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 3;
+                this.speed = 8;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0';
+                ctx.fill();
+                ctx.closePath();
+            }
+            update() {
+                this.y -= this.speed;
+            }
+        }
+
+        // Partículas para explosiones
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = Math.random() * 3 + 1;
+                this.speedX = (Math.random() - 0.5) * 6;
+                this.speedY = (Math.random() - 0.5) * 6;
+                this.life = 1.0;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life -= 0.02;
+            }
+            draw() {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        function spawnWave() {
+            const count = 5 + (wave * 2);
+            for (let i = 0; i < count; i++) {
+                const x = Math.random() * (canvas.width - 40);
+                const y = -Math.random() * 500 - 50;
+                const speed = 1 + (wave * 0.2);
+                enemies.push(new Enemy(x, y, speed, 1));
+            }
+        }
+
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 15; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            wave = 1;
+            lives = 3;
+            enemies = [];
+            bullets = [];
+            particles = [];
+            player.x = canvas.width / 2 - 20;
+            player.y = canvas.height - 60;
+            scoreEl.innerText = score;
+            waveEl.innerText = wave;
+            livesEl.innerText = lives;
+            spawnWave();
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            player.update();
+
+            // Balas
+            bullets.forEach((b, index) => {
+                b.update();
+                if (b.y < 0) bullets.splice(index, 1);
+            });
+
+            // Enemigos
+            enemies.forEach((en, eIdx) => {
+                en.update();
+
+                // Colisión con jugador
+                if (en.x < player.x + player.w && en.x + en.w > player.x && 
+                    en.y < player.y + player.h && en.y + en.h > player.y) {
+                    lives--;
+                    livesEl.innerText = lives;
+                    createExplosion(player.x + player.w/2, player.y + player.h/2, '#0ff');
+                    enemies.splice(eIdx, 1);
+                    if (lives <= 0) gameOver();
+                }
+
+                // Si pasa el límite inferior
+                if (en.y > canvas.height) {
+                    enemies.splice(eIdx, 1);
+                }
+
+                // Colisión con balas
+                bullets.forEach((b, bIdx) => {
+                    if (b.x > en.x && b.x < en.x + en.w && b.y > en.y && b.y < en.y + en.h) {
+                        createExplosion(en.x + en.w/2, en.y + en.h/2, en.color);
+                        enemies.splice(eIdx, 1);
+                        bullets.splice(bIdx, 1);
+                        score += 10;
+                        scoreEl.innerText = score;
+                    }
+                });
+            });
+
+            // Partículas
+            particles.forEach((p, index) => {
+                p.update();
+                if (p.life <= 0) particles.splice(index, 1);
+            });
+
+            // Nueva oleada
+            if (enemies.length === 0) {
+                wave++;
+                waveEl.innerText = wave;
+                spawnWave();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Estrellas de fondo (decoración rápida)
+            ctx.fillStyle = '#fff';
+            for(let i=0; i<20; i++) {
+                ctx.fillRect(Math.random()*canvas.width, (Date.now()/20 + i*100)%canvas.height, 1, 1);
+            }
+
+            player.draw();
+            bullets.forEach(b => b.draw());
+            enemies.forEach(en => en.draw());
+            particles.forEach(p => p.draw());
+
+            requestAnimationFrame(() => {
+                update();
+                draw();
+            });
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            overlay.style.display = 'block';
+            msgTitle.innerText = "¡FIN DEL JUEGO!";
+            msgText.innerText = `Puntuación final: ${score} | Oleada: ${wave}`;
+            startBtn.innerText = "REINTENTAR";
+        }
+
+        // Eventos
+        window.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === ' ' && gameRunning) {
+                bullets.push(new Bullet(player.x + player.w / 2, player.y));
+            }
+        });
+        window.addEventListener('keyup', e => keys[e.key] = false);
+
+        startBtn.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            resetGame();
+            if (!gameRunning) {
+                gameRunning = true;
+                draw();
+            }
+        });
+
+        // Mostrar overlay inicial
+        overlay.style.display = 'block';
+
+    </script>
+</body>
+</html>

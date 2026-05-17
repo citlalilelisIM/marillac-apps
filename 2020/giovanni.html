@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NEON ANGRY ORBS - Fullscreen Edition</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; cursor: crosshair; }
+        canvas { display: block; margin: auto; background: #000; }
+        
+        #ui-container {
+            position: absolute; top: 20px; left: 20px; color: #0ff;
+            pointer-events: none; text-shadow: 0 0 10px #0ff; z-index: 5;
+        }
+        .stat { font-size: 1.5rem; margin-bottom: 5px; background: rgba(0,20,20,0.8); padding: 8px 20px; border-radius: 5px; border-left: 5px solid #0ff; }
+        #lives-display { color: #ff0055; letter-spacing: 3px; }
+        
+        #radar-container {
+            position: absolute; top: 20px; right: 20px; width: 150px; height: 150px;
+            border: 2px solid #0ff; border-radius: 50%; background: rgba(0, 40, 40, 0.4);
+            box-shadow: 0 0 15px #0ff; overflow: hidden;
+        }
+
+        #msg-overlay {
+            position: absolute; inset: 0; display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.95); color: #fff; text-align: center; z-index: 10;
+        }
+        .panel { border: 3px solid #ff0055; padding: 40px; border-radius: 15px; background: #050005; box-shadow: 0 0 30px #ff0055; }
+        
+        .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 25px; }
+        button { 
+            background: #ff0055; color: #fff; border: none; padding: 15px 35px; font-size: 1.2rem; 
+            cursor: pointer; font-weight: bold; border-radius: 5px; transition: 0.2s; text-transform: uppercase;
+        }
+        button:hover { background: #fff; color: #000; box-shadow: 0 0 25px #fff; transform: scale(1.05); }
+        .btn-alt { background: #333; color: #0ff; border: 1px solid #0ff; }
+
+        #wave-msg { 
+            position: absolute; top: 25%; width: 100%; text-align: center; 
+            color: #ff0055; font-size: 4rem; display: none; text-shadow: 0 0 25px #ff0055; font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <div class="stat">SISTEMA: <span id="lives-display">❤️❤️❤️❤️</span></div>
+        <div class="stat">OLEADA: <span id="wave-count">1</span></div>
+    </div>
+
+    <div id="radar-container">
+        <canvas id="radar"></canvas>
+    </div>
+
+    <div id="wave-msg">¡Horda Enemiga Detectada!</div>
+
+    <div id="msg-overlay">
+        <div id="start-panel" class="panel">
+            <h1 style="color:#ff0055; text-shadow: 0 0 15px #ff0055;">NEON ANGRY ORBS</h1>
+            <p>RADAR TÁCTICO | SPAWN SEGURO | PANTALLA COMPLETA [F]</p>
+            <div class="btn-group">
+                <button onclick="startGame()">INICIAR COMBATE</button>
+                <button class="btn-alt" onclick="toggleFullScreen()">PANTALLA COMPLETA</button>
+            </div>
+        </div>
+        <div id="death-panel" class="panel" style="display:none">
+            <h1 style="color:#ff0055; text-shadow: 0 0 15px #ff0055;">SEÑAL PERDIDA</h1>
+            <p id="final-stats"></p>
+            <div class="btn-group">
+                <button onclick="location.reload()">REINTENTAR</button>
+                <button class="btn-alt" onclick="toggleFullScreen()">PANTALLA COMPLETA</button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const radarCanvas = document.getElementById('radar');
+const rctx = radarCanvas.getContext('2d');
+
+let W = 800, H = 450;
+radarCanvas.width = 150;
+radarCanvas.height = 150;
+
+// Función de Pantalla Completa Mejorada
+function toggleFullScreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            console.error(`Error al intentar modo pantalla completa: ${err.message}`);
+        });
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+}
+
+function resizeCanvas() {
+    if (document.fullscreenElement) {
+        W = window.innerWidth;
+        H = window.innerHeight;
+    } else {
+        W = 800; H = 450;
+    }
+    canvas.width = W;
+    canvas.height = H;
+}
+
+// Escuchar cambios de pantalla completa
+document.addEventListener('fullscreenchange', resizeCanvas);
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+let playing = false, lives = 4, wave = 0, flash = 0, invulnerable = 0;
+let player = { x: 2, y: 2, dir: 0, fov: Math.PI / 3, speed: 0.065 };
+let enemies = [];
+
+const map = [
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,1],
+    [1,0,1,0,0,0,1,1,0,1],
+    [1,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,0,0,0,1,0,1],
+    [1,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1],
+];
+
+class AngryOrb {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.alive = true;
+        this.radius = 0.28; 
+        this.speed = 0.016 + (wave * 0.002);
+    }
+    update() {
+        let dx = player.x - this.x, dy = player.y - this.y;
+        let d = Math.hypot(dx, dy);
+        
+        if(d > 0.4) {
+            this.x += (dx/d) * this.speed;
+            this.y += (dy/d) * this.speed;
+        } else if (invulnerable <= 0) {
+            lives--;
+            invulnerable = 65; 
+            document.getElementById('lives-display').innerText = "❤️".repeat(lives);
+            flash = -12; 
+            if(lives <= 0) gameOver();
+        }
+
+        enemies.forEach(other => {
+            if (other === this || !other.alive) return;
+            let ex = other.x - this.x, ey = other.y - this.y;
+            let dist = Math.hypot(ex, ey);
+            let minDist = this.radius * 2.2; 
+            if (dist < minDist) {
+                let overlap = minDist - dist;
+                this.x -= (ex / dist) * (overlap * 0.5);
+                this.y -= (ey / dist) * (overlap * 0.5);
+            }
+        });
+    }
+}
+
+function spawnWave() {
+    wave++;
+    document.getElementById('wave-count').innerText = wave;
+    const msg = document.getElementById('wave-msg');
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 1800);
+
+    let count = 3 + wave; 
+    for(let i=0; i<count; i++) {
+        let rx, ry, dist;
+        do {
+            rx = Math.random() * 8 + 1;
+            ry = Math.random() * 5 + 1;
+            dist = Math.hypot(rx - player.x, ry - player.y);
+        } while(map[Math.floor(ry)][Math.floor(rx)] !== 0 || dist < 4.5);
+        enemies.push(new AngryOrb(rx, ry));
+    }
+}
+
+function startGame() {
+    playing = true;
+    document.getElementById('msg-overlay').style.display = 'none';
+    canvas.requestPointerLock();
+    if(enemies.length === 0) spawnWave();
+    loop();
+}
+
+function gameOver() {
+    playing = false;
+    document.exitPointerLock();
+    document.getElementById('msg-overlay').style.display = 'flex';
+    document.getElementById('start-panel').style.display = 'none';
+    document.getElementById('death-panel').style.display = 'block';
+    document.getElementById('final-stats').innerText = `PUNTUACIÓN: OLEADA ${wave}`;
+}
+
+document.addEventListener('mousemove', e => {
+    if(document.pointerLockElement === canvas) player.dir += e.movementX * 0.003;
+});
+
+const keys = {};
+window.onkeydown = e => {
+    keys[e.code] = true;
+    if(e.code === 'KeyF') toggleFullScreen(); // Atajo para pantalla completa
+};
+window.onkeyup = e => keys[e.code] = false;
+
+window.onmousedown = () => {
+    if(!playing || document.pointerLockElement !== canvas) return;
+    flash = 6;
+    enemies.forEach(en => {
+        let ang = Math.atan2(en.y - player.y, en.x - player.x) - player.dir;
+        while(ang < -Math.PI) ang += Math.PI*2;
+        while(ang > Math.PI) ang -= Math.PI*2;
+        if(Math.abs(ang) < 0.16) en.alive = false;
+    });
+};
+
+function loop() {
+    if(!playing) return;
+    if(invulnerable > 0) invulnerable--;
+
+    let dx = 0, dy = 0;
+    if(keys['KeyW']) { dx += Math.cos(player.dir); dy += Math.sin(player.dir); }
+    if(keys['KeyS']) { dx -= Math.cos(player.dir); dy -= Math.sin(player.dir); }
+    if(keys['KeyA']) { dx += Math.sin(player.dir); dy -= Math.cos(player.dir); }
+    if(keys['KeyD']) { dx -= Math.sin(player.dir); dy += Math.cos(player.dir); }
+    
+    if(map[Math.floor(player.y)][Math.floor(player.x + dx * player.speed)] === 0) player.x += dx * player.speed;
+    if(map[Math.floor(player.y + dy * player.speed)][Math.floor(player.x)] === 0) player.y += dy * player.speed;
+
+    enemies = enemies.filter(e => e.alive);
+    enemies.forEach(en => en.update());
+    if(enemies.length === 0) spawnWave();
+
+    // Radar
+    rctx.clearRect(0,0,150,150);
+    rctx.strokeStyle = "rgba(0, 255, 255, 0.3)";
+    rctx.beginPath(); rctx.arc(75, 75, 70, 0, Math.PI*2); rctx.stroke();
+    rctx.fillStyle = "#0ff"; rctx.beginPath(); rctx.arc(75,75,3,0,Math.PI*2); rctx.fill();
+    enemies.forEach(en => {
+        let rx = (en.x - player.x) * 14, ry = (en.y - player.y) * 14;
+        if(Math.hypot(rx, ry) < 70) {
+            rctx.fillStyle = "#f05"; rctx.beginPath(); rctx.arc(75+rx, 75+ry, 3, 0, Math.PI*2); rctx.fill();
+        }
+    });
+
+    // Raycasting Render
+    ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = "#050005"; ctx.fillRect(0, H/2, W, H/2);
+    let zBuf = [];
+    for(let i=0; i<W; i++) {
+        let ang = (player.dir - player.fov/2) + (i/W) * player.fov;
+        let d = 0, rx = Math.cos(ang), ry = Math.sin(ang);
+        while(d < 12) { d += 0.05; if(map[Math.floor(player.y + ry*d)][Math.floor(player.x + rx*d)] === 1) break; }
+        let realD = d * Math.cos(ang - player.dir);
+        zBuf[i] = realD;
+        let h = H / realD;
+        ctx.fillStyle = `rgb(0, ${180 - realD*15}, ${255 - realD*10})`;
+        ctx.fillRect(i, H/2 - h/2, 1, h);
+    }
+
+    enemies.forEach(en => {
+        let ang = Math.atan2(en.y - player.y, en.x - player.x) - player.dir;
+        while(ang < -Math.PI) ang += Math.PI*2;
+        while(ang > Math.PI) ang -= Math.PI*2;
+        if(Math.abs(ang) < player.fov) {
+            let sx = (ang / (player.fov/2) * 0.5 + 0.5) * W;
+            let d = Math.hypot(en.x - player.x, en.y - player.y);
+            if(d < zBuf[Math.floor(sx)]) {
+                let size = H / d * 0.75;
+                ctx.save();
+                ctx.translate(sx, H/2);
+                ctx.scale(size/100, size/100);
+                ctx.shadowBlur = 25; ctx.shadowColor = "#ff0055";
+                ctx.fillStyle = "#aa0000";
+                ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0; ctx.fillStyle = "#000";
+                ctx.beginPath(); ctx.moveTo(-30, -25); ctx.lineTo(-10, -15); ctx.lineTo(-10, -5); ctx.lineTo(-30, -15); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(30, -25); ctx.lineTo(10, -15); ctx.lineTo(10, -5); ctx.lineTo(30, -15); ctx.fill();
+                ctx.fillRect(-25, 15, 50, 6); ctx.restore();
+            }
+        }
+    });
+
+    if(flash > 0) {
+        ctx.fillStyle = "rgba(0, 255, 255, 0.3)"; ctx.fillRect(0,0,W,H);
+        flash--;
+    } else if (flash < 0) {
+        ctx.fillStyle = "rgba(255, 0, 0, 0.4)"; ctx.fillRect(0,0,W,H);
+        flash++;
+    }
+
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(W/2, H/2, 6, 0, Math.PI*2); ctx.stroke();
+
+    requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

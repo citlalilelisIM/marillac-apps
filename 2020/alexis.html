@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rafa Vibes - Minion Adventure</title>
+    <style>
+        :root {
+            --mario-red: #e52521;
+            --mario-blue: #049cd8;
+            --mario-yellow: #fbd000;
+            --grass-green: #7cfc00;
+            --path-color: #f8d8a0;
+        }
+
+        body {
+            margin: 0;
+            background-color: #222;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            background-color: #55aa55; /* Color pasto */
+            border: 10px solid var(--mario-blue);
+            image-rendering: pixelated;
+            display: none;
+            overflow: hidden;
+        }
+
+        /* Pantallas */
+        .screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+        }
+
+        #start-screen { background: var(--mario-red); }
+        
+        h1 { font-size: 3rem; text-shadow: 4px 4px black; margin: 10px; }
+        .btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background: var(--mario-yellow);
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 4px 4px 0px #886a00;
+            margin-top: 20px;
+        }
+
+        /* Elementos del Juego */
+        #path {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: var(--path-color);
+            transform: translateY(-50%);
+            border-top: 4px dashed white;
+            border-bottom: 4px dashed white;
+        }
+
+        #player {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: yellow; /* Representa al Minion */
+            border-radius: 50%;
+            top: 180px;
+            left: 20px;
+            z-index: 10;
+            border: 3px solid #333;
+            transition: opacity 0.3s;
+        }
+
+        /* Ojo del minion */
+        #player::after {
+            content: '';
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: white;
+            border-radius: 50%;
+            top: 5px;
+            right: 5px;
+            border: 2px solid grey;
+        }
+
+        .box {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: var(--mario-yellow);
+            border: 3px solid orange;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            font-size: 20px;
+        }
+
+        #status-bar {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        #credits {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .invisible { opacity: 0.3 !important; }
+    </style>
+</head>
+<body>
+
+    <div id="credits">Creado por: gamerafavibes</div>
+
+    <div id="start-screen" class="screen">
+        <h1>RAFA VIBES</h1>
+        <p>Esquiva las trampas invisibles</p>
+        <label>Dificultad (1-10):</label>
+        <input type="number" id="difficulty" min="1" max="10" value="1" style="width: 50px;">
+        <button class="btn" onclick="startGame()">¡CARRERA!</button>
+    </div>
+
+    <div id="end-screen" class="screen" style="display: none;">
+        <h1 id="end-title">GAME OVER</h1>
+        <p id="end-msg"></p>
+        <button class="btn" onclick="location.reload()">REINTENTAR</button>
+    </div>
+
+    <div id="game-container">
+        <div id="status-bar">
+            <span>Nivel: <span id="lvl-display">1</span></span>
+            <span>Poder: <span id="power-display">Ninguno</span></span>
+        </div>
+        <div id="path"></div>
+        <div id="player"></div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const gameContainer = document.getElementById('game-container');
+        const startScreen = document.getElementById('start-screen');
+        const endScreen = document.getElementById('end-screen');
+        const powerDisplay = document.getElementById('power-display');
+
+        let posX = 20;
+        let posY = 180;
+        let speed = 5;
+        let isGameActive = false;
+        let isInvisible = false;
+        let traps = [];
+        let boxes = [];
+        let level = 1;
+
+        // "Sonidos" simulados con AudioContext para no depender de archivos externos
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, duration) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
+            osc.stop(ctx.currentTime + duration);
+        }
+
+        function playStartSound() {
+            playTone(400, 'square', 0.1);
+            setTimeout(() => playTone(600, 'square', 0.3), 150);
+        }
+
+        function playLoseSound() {
+            playTone(150, 'sawtooth', 0.5);
+        }
+
+        function startGame() {
+            level = parseInt(document.getElementById('difficulty').value);
+            startScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            isGameActive = true;
+            document.getElementById('lvl-display').innerText = level;
+            playStartSound();
+            generateLevel();
+        }
+
+        function generateLevel() {
+            // Limpiar elementos viejos
+            document.querySelectorAll('.trap, .box').forEach(el => el.remove());
+            traps = [];
+            boxes = [];
+
+            // Generar trampas invisibles según dificultad
+            for(let i = 0; i < level * 3; i++) {
+                let tx = 100 + Math.random() * 400;
+                traps.push({ x: tx, w: 30 });
+            }
+
+            // Generar cajas de poder
+            const powers = ['Rápido', 'Invisible', 'Lento'];
+            for(let i = 0; i < 2; i++) {
+                let bx = 150 + Math.random() * 300;
+                let power = powers[Math.floor(Math.random() * powers.length)];
+                
+                let boxDiv = document.createElement('div');
+                boxDiv.className = 'box';
+                boxDiv.style.left = bx + 'px';
+                boxDiv.style.top = '185px';
+                boxDiv.innerText = '?';
+                gameContainer.appendChild(boxDiv);
+                
+                boxes.push({ x: bx, power: power, el: boxDiv });
+            }
+        }
+
+        function gameOver(win) {
+            isGameActive = false;
+            endScreen.style.display = 'flex';
+            if(win) {
+                document.getElementById('end-title').innerText = "¡GANASTE!";
+                document.getElementById('end-title').style.color = "var(--mario-yellow)";
+                document.getElementById('end-msg').innerText = "Dominaste el circuito Rafa Vibes.";
+                playStartSound();
+            } else {
+                document.getElementById('end-title').innerText = "GAME OVER";
+                document.getElementById('end-title').style.color = "var(--mario-red)";
+                document.getElementById('end-msg').innerText = "Caíste en la trampa secreta.";
+                playLoseSound();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if(!isGameActive) return;
+
+            if(e.key === 'ArrowRight') posX += speed;
+            if(e.key === 'ArrowLeft') posX -= speed;
+            if(e.key === 'ArrowUp') posY -= speed;
+            if(e.key === 'ArrowDown') posY += speed;
+
+            // Límites del camino
+            if(posY < 170) posY = 170;
+            if(posY > 210) posY = 210;
+            if(posX < 0) posX = 0;
+
+            player.style.left = posX + 'px';
+            player.style.top = posY + 'px';
+
+            // Chequear cajas de poder
+            boxes.forEach((b, index) => {
+                if(Math.abs(posX - b.x) < 20) {
+                    applyPower(b.power);
+                    b.el.remove();
+                    boxes.splice(index, 1);
+                    playTone(800, 'sine', 0.2);
+                }
+            });
+
+            // Chequear trampas (si no es invisible)
+            if(!isInvisible) {
+                traps.forEach(t => {
+                    if(posX > t.x && posX < t.x + t.w) {
+                        gameOver(false);
+                    }
+                });
+            }
+
+            // Meta
+            if(posX > 560) {
+                gameOver(true);
+            }
+        });
+
+        function applyPower(power) {
+            powerDisplay.innerText = power;
+            if(power === 'Rápido') speed = 10;
+            if(power === 'Lento') speed = 2;
+            if(power === 'Invisible') {
+                isInvisible = true;
+                player.classList.add('invisible');
+                setTimeout(() => {
+                    isInvisible = false;
+                    player.classList.remove('invisible');
+                    powerDisplay.innerText = "Ninguno";
+                }, 3000);
+            } else {
+                setTimeout(() => {
+                    speed = 5;
+                    powerDisplay.innerText = "Ninguno";
+                }, 4000);
+            }
+        }
+    </script>
+</body>
+</html>

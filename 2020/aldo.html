@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nebula Royale - Survival</title>
+    <style>
+        body { margin: 0; background: #050505; color: #0f0; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #0f0; box-shadow: 0 0 20px #0f0; background: #000; cursor: crosshair; }
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; }
+        .stat { font-size: 1.2rem; margin-bottom: 5px; text-shadow: 0 0 5px #0f0; }
+        #game-over { position: absolute; display: none; text-align: center; background: rgba(0,0,0,0.9); padding: 20px; border: 2px solid #f00; }
+        button { background: #0f0; border: none; padding: 10px 20px; cursor: pointer; font-family: inherit; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stat">VIDA: <span id="hp">100</span></div>
+        <div class="stat">PUNTOS: <span id="score">0</span></div>
+        <div class="stat">ARMA: <span id="weapon">Pistola Neón</span></div>
+        <div class="stat">OLEADA: <span id="wave">1</span></div>
+    </div>
+
+    <div id="game-over">
+        <h1 style="color: #f00;">¡ELIMINADO!</h1>
+        <p>Tu leyenda terminó aquí.</p>
+        <button onclick="location.reload()">REINTENTAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const hpEl = document.getElementById('hp');
+const scoreEl = document.getElementById('score');
+const weaponEl = document.getElementById('weapon');
+const waveEl = document.getElementById('wave');
+const gameOverEl = document.getElementById('game-over');
+
+canvas.width = window.innerWidth * 0.8;
+canvas.height = window.innerHeight * 0.8;
+
+// --- CONFIGURACIÓN DE ARMAS ---
+const WEAPONS = [
+    { name: "Pistola Neón", color: "#0f0", fireRate: 400, bulletSpeed: 7, damage: 1, type: "single" },
+    { name: "Rifle de Asalto", color: "#0af", fireRate: 150, bulletSpeed: 10, damage: 1.5, type: "single" },
+    { name: "Escopeta de Plasma", color: "#f0f", fireRate: 800, bulletSpeed: 6, damage: 2, type: "spread" },
+    { name: "Aniquilador", color: "#ff0", fireRate: 100, bulletSpeed: 12, damage: 3, type: "single" }
+];
+
+let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    size: 20,
+    hp: 100,
+    score: 0,
+    weaponIdx: 0,
+    lastShot: 0
+};
+
+let keys = {};
+let mouse = { x: 0, y: 0, down: false };
+let bullets = [];
+let enemies = [];
+let wave = 1;
+
+// --- CONTROLES ---
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+window.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+});
+window.addEventListener('mousedown', () => mouse.down = true);
+window.addEventListener('mouseup', () => mouse.down = false);
+
+function spawnEnemy() {
+    // Dificultad progresiva: los enemigos ganan vida y velocidad según la oleada
+    let side = Math.floor(Math.random() * 4);
+    let x, y;
+    if(side === 0) { x = Math.random()*canvas.width; y = -30; }
+    else if(side === 1) { x = canvas.width+30; y = Math.random()*canvas.height; }
+    else if(side === 2) { x = Math.random()*canvas.width; y = canvas.height+30; }
+    else { x = -30; y = Math.random()*canvas.height; }
+
+    let level = Math.random() * wave;
+    let type = {
+        hp: 1 + (level * 0.5),
+        speed: 1 + (Math.random() * (wave * 0.2)),
+        color: level > 5 ? "#f00" : (level > 2 ? "#ff0" : "#0ff"),
+        size: 15 + (Math.random() * 10)
+    };
+
+    enemies.push({ x, y, ...type });
+}
+
+function shoot() {
+    let now = Date.now();
+    let w = WEAPONS[player.weaponIdx];
+    if (now - player.lastShot < w.fireRate) return;
+
+    player.lastShot = now;
+    let angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+
+    if (w.type === "single") {
+        bullets.push({ x: player.x, y: player.y, angle: angle, speed: w.bulletSpeed, color: w.color, damage: w.damage });
+    } else if (w.type === "spread") {
+        for (let i = -0.3; i <= 0.3; i += 0.3) {
+            bullets.push({ x: player.x, y: player.y, angle: angle + i, speed: w.bulletSpeed, color: w.color, damage: w.damage });
+        }
+    }
+}
+
+function update() {
+    if (player.hp <= 0) {
+        gameOverEl.style.display = "block";
+        return;
+    }
+
+    // Movimiento Jugador
+    if (keys['KeyW'] || keys['ArrowUp']) player.y -= 3;
+    if (keys['KeyS'] || keys['ArrowDown']) player.y += 3;
+    if (keys['KeyA'] || keys['ArrowLeft']) player.x -= 3;
+    if (keys['KeyD'] || keys['ArrowRight']) player.x += 3;
+
+    if (mouse.down) shoot();
+
+    // Actualizar Balas
+    bullets.forEach((b, i) => {
+        b.x += Math.cos(b.angle) * b.speed;
+        b.y += Math.sin(b.angle) * b.speed;
+        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+    });
+
+    // Actualizar Enemigos y Dificultad
+    if (Math.random() < 0.02 + (wave * 0.005)) spawnEnemy();
+    
+    enemies.forEach((en, ei) => {
+        let angle = Math.atan2(player.y - en.y, player.x - en.x);
+        en.x += Math.cos(angle) * en.speed;
+        en.y += Math.sin(angle) * en.speed;
+
+        // Colisión enemigo con jugador
+        let dist = Math.hypot(player.x - en.x, player.y - en.y);
+        if (dist < player.size) {
+            player.hp -= 0.5;
+            hpEl.innerText = Math.ceil(player.hp);
+        }
+
+        // Colisión bala con enemigo
+        bullets.forEach((b, bi) => {
+            let bDist = Math.hypot(b.x - en.x, b.y - en.y);
+            if (bDist < en.size) {
+                en.hp -= b.damage;
+                bullets.splice(bi, 1);
+                if (en.hp <= 0) {
+                    enemies.splice(ei, 1);
+                    player.score += 10;
+                    scoreEl.innerText = player.score;
+                    
+                    // Subir de nivel/armas según puntos
+                    if (player.score % 200 === 0) {
+                        wave++;
+                        waveEl.innerText = wave;
+                        if (player.weaponIdx < WEAPONS.length - 1) {
+                            player.weaponIdx++;
+                            weaponEl.innerText = WEAPONS[player.weaponIdx].name;
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    draw();
+    requestAnimationFrame(update);
+}
+
+function draw() {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Dibujar Jugador (con rotación hacia el ratón)
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(Math.atan2(mouse.y - player.y, mouse.x - player.x));
+    ctx.strokeStyle = WEAPONS[player.weaponIdx].color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-10, -10, 20, 20);
+    ctx.restore();
+
+    // Balas
+    bullets.forEach(b => {
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+        ctx.fill();
+    });
+
+    // Enemigos
+    enemies.forEach(en => {
+        ctx.strokeStyle = en.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(en.x, en.y - en.size);
+        ctx.lineTo(en.x + en.size, en.y + en.size);
+        ctx.lineTo(en.x - en.size, en.y + en.size);
+        ctx.closePath();
+        ctx.stroke();
+    });
+}
+
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlantCare - Fotos Únicas</title>
+    <style>
+        :root {
+            --green-dark: #1b4332;
+            --green-main: #2d6a4f;
+            --bg: #f0f7f4;
+            --white: #ffffff;
+            --water: #34a0a4;
+            --danger: #e63946;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 450px; }
+
+        .add-plant-card {
+            background: var(--white);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        h1 { color: var(--green-dark); text-align: center; margin-top: 0; }
+
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--green-dark); }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        .main-btn {
+            width: 100%;
+            padding: 15px;
+            background: var(--green-main);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .plant-card {
+            background: var(--white);
+            border-radius: 20px;
+            overflow: hidden;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+        }
+
+        .plant-img {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            background: #eee;
+        }
+
+        .plant-info { padding: 20px; }
+        .plant-info h3 { margin: 0 0 10px 0; color: var(--green-dark); text-transform: capitalize; font-size: 1.4rem; }
+
+        .status-label { font-size: 0.9rem; font-weight: bold; margin-bottom: 5px; display: block; }
+
+        .bar-container {
+            width: 100%;
+            height: 12px;
+            background: #eee;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--water);
+            transition: width 0.8s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+        }
+
+        .actions { display: flex; justify-content: space-between; align-items: center; }
+        
+        .water-btn {
+            background: var(--water);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .water-btn:hover { background: #2a8a8e; }
+
+        .delete-icon {
+            color: #cbd5e1;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+        .delete-icon:hover { color: var(--danger); }
+
+        .needs-water-bg { border: 2px solid var(--danger); }
+        .needs-water-text { color: var(--danger) !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🌿 Mi Jardín Inteligente</h1>
+
+    <div class="add-plant-card">
+        <div class="input-group">
+            <label>Nombre de la planta</label>
+            <input type="text" id="plantName" placeholder="Ej: Suculenta, Palmera, Orquídea...">
+        </div>
+        <div class="input-group">
+            <label>Frecuencia de riego (días)</label>
+            <input type="number" id="plantFreq" placeholder="Ej: 4" min="1">
+        </div>
+        <button class="main-btn" onclick="addPlant()">+ Añadir al Registro</button>
+    </div>
+
+    <div id="plantList"></div>
+</div>
+
+<script>
+    // Cargamos las plantas de la memoria del navegador
+    let plants = JSON.parse(localStorage.getItem('smartGardenV3')) || [];
+
+    function addPlant() {
+        const nameInput = document.getElementById('plantName');
+        const freqInput = document.getElementById('plantFreq');
+        
+        const name = nameInput.value.trim();
+        const freq = freqInput.value;
+
+        if (!name || !freq) return alert("Por favor, completa los datos.");
+
+        // CREAMOS UNA URL ÚNICA: Usamos el nombre + un número aleatorio 
+        // para que Google/Unsplash asigne una foto fija a ESTA planta.
+        const randomId = Math.floor(Math.random() * 1000);
+        const imageUrl = `https://loremflickr.com/500/400/${encodeURIComponent(name)},plant/all?lock=${randomId}`;
+
+        const newPlant = {
+            id: Date.now(),
+            name: name,
+            freq: parseInt(freq),
+            lastWatered: new Date().getTime(),
+            image: imageUrl
+        };
+
+        plants.push(newPlant);
+        saveAndRender();
+        
+        nameInput.value = '';
+        freqInput.value = '';
+    }
+
+    function waterPlant(id) {
+        plants = plants.map(p => p.id === id ? {...p, lastWatered: new Date().getTime()} : p);
+        saveAndRender();
+    }
+
+    function deletePlant(id) {
+        if(confirm("¿Eliminar esta planta?")) {
+            plants = plants.filter(p => p.id !== id);
+            saveAndRender();
+        }
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('smartGardenV3', JSON.stringify(plants));
+        render();
+    }
+
+    function render() {
+        const list = document.getElementById('plantList');
+        list.innerHTML = '';
+
+        plants.forEach(p => {
+            const now = new Date().getTime();
+            const daysPassed = (now - p.lastWatered) / (1000 * 60 * 60 * 24);
+            let percent = 100 - (daysPassed / p.freq * 100);
+            if(percent < 0) percent = 0;
+            
+            const needsWater = daysPassed >= p.freq;
+
+            const card = document.createElement('div');
+            card.className = `plant-card ${needsWater ? 'needs-water-bg' : ''}`;
+            
+            card.innerHTML = `
+                <img src="${p.image}" class="plant-img" alt="${p.name}">
+                <div class="plant-info">
+                    <h3 class="${needsWater ? 'needs-water-text' : ''}">${p.name}</h3>
+                    
+                    <span class="status-label">Hidratación:</span>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: ${percent}%; background-color: ${needsWater ? '#e63946' : '#34a0a4'}"></div>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="water-btn" onclick="waterPlant(${p.id})">
+                            💧 ${needsWater ? 'REGAR AHORA' : 'Registrar Riego'}
+                        </button>
+                        <span class="delete-icon" onclick="deletePlant(${p.id})">🗑️</span>
+                    </div>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    render();
+</script>
+
+</body>
+</html>

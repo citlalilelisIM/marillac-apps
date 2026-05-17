@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello Kitty: Colector de Emociones 🎀</title>
+    <style>
+        :root {
+            --hk-pink: #ffb6c1;
+            --hk-dark-pink: #ff69b4;
+            --hk-bg: #fff0f5;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--hk-bg);
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            position: relative;
+            border: 8px solid var(--hk-pink);
+            border-radius: 30px;
+            box-shadow: 0 10px 20px rgba(255, 182, 193, 0.5);
+            background: white;
+        }
+
+        canvas { display: block; background: #fff; cursor: none; }
+
+        .game-ui {
+            position: absolute;
+            top: 15px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--hk-dark-pink);
+            pointer-events: none;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 240, 245, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border-radius: 22px;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background: var(--hk-dark-pink);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #c71585;
+        }
+
+        button:active { transform: translateY(5px); box-shadow: none; }
+    </style>
+</head>
+<body>
+
+    <h2 style="color: var(--hk-dark-pink);">✨ ¡Atrapa las Emociones de tu Diario! ✨</h2>
+
+    <div id="game-wrapper">
+        <div class="game-ui">
+            <span>💖 Felicidad: <id id="score">0</id></span>
+            <span>✨ Nivel: <id id="level">1</id></span>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="overlay">
+            <h1 style="color: var(--hk-dark-pink);">Hello Kitty <br> Emotion Catcher</h1>
+            <p>Mueve el ratón para recolectar emociones <br> ¡No dejes que caigan las nubes tristes! ☁️</p>
+            <button onclick="startGame()">¡Jugar! 🎀</button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const levelEl = document.getElementById('level');
+    const overlay = document.getElementById('overlay');
+
+    canvas.width = 500;
+    canvas.height = 600;
+
+    let score = 0;
+    let level = 1;
+    let gameActive = false;
+    let items = [];
+    let mouseX = 250;
+
+    const emojis = ["💖", "✨", "🌸", "🍎", "🎀"];
+    const negative = "☁️";
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+    });
+
+    function spawnItem() {
+        if (!gameActive) return;
+        const isNegative = Math.random() < 0.2;
+        items.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -50,
+            text: isNegative ? negative : emojis[Math.floor(Math.random() * emojis.length)],
+            isBad: isNegative,
+            speed: 2 + (level * 0.5)
+        });
+        setTimeout(spawnItem, Math.max(400, 1000 - (level * 100)));
+    }
+
+    function drawKitty(x) {
+        ctx.fillStyle = "white";
+        ctx.beginPath(); // Cara
+        ctx.ellipse(x, 540, 40, 30, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#ffb6c1";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Moño
+        ctx.fillStyle = "#ff0000";
+        ctx.beginPath();
+        ctx.arc(x + 25, 520, 10, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function update() {
+        if (!gameActive) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawKitty(mouseX);
+
+        items.forEach((item, index) => {
+            item.y += item.speed;
+            ctx.font = "40px Arial";
+            ctx.fillText(item.text, item.x, item.y);
+
+            // Colisión con Hello Kitty
+            if (item.y > 510 && item.y < 570 && item.x > mouseX - 50 && item.x < mouseX + 50) {
+                if (item.isBad) {
+                    endGame();
+                } else {
+                    score += 10;
+                    scoreEl.innerText = score;
+                    if (score % 100 === 0) {
+                        level++;
+                        levelEl.innerText = level;
+                    }
+                    items.splice(index, 1);
+                }
+            }
+
+            if (item.y > canvas.height) items.splice(index, 1);
+        });
+
+        requestAnimationFrame(update);
+    }
+
+    function startGame() {
+        score = 0;
+        level = 1;
+        items = [];
+        gameActive = true;
+        scoreEl.innerText = "0";
+        levelEl.innerText = "1";
+        overlay.style.display = 'none';
+        spawnItem();
+        update();
+    }
+
+    function endGame() {
+        gameActive = false;
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <h1 style="color: var(--hk-dark-pink);">¡Oh no! ☁️</h1>
+            <p>Atrapaste una nube de tristeza.<br>Puntos: ${score}</p>
+            <button onclick="startGame()">Intentar de nuevo 🍎</button>
+        `;
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PIKA-ARCADE NEÓN</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            width: 90%;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .stat {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 10px;
+        }
+
+        #puntos-txt { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+        #vidas-txt { color: #ff0055; text-shadow: 0 0 10px #ff0055; }
+
+        canvas {
+            border: 4px solid #ffff00;
+            box-shadow: 0 0 20px #ffff00;
+            background-color: #050505;
+            background-image: radial-gradient(#ff0000 1.5px, transparent 1.5px);
+            background-size: 40px 40px;
+        }
+
+        #pantalla-fin {
+            display: none;
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            padding: 50px;
+            border: 3px solid #ffff00;
+            text-align: center;
+            box-shadow: 0 0 50px #ffff00;
+            z-index: 10;
+        }
+
+        h1 { color: #ffff00; font-size: 48px; margin: 0; }
+        button {
+            margin-top: 20px;
+            padding: 15px 30px;
+            background: transparent;
+            color: #ffff00;
+            border: 2px solid #ffff00;
+            font-size: 20px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        button:hover { background: #ffff00; color: #000; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div class="stat" id="puntos-txt">PUNTOS: 0</div>
+    <div class="stat" id="vidas-txt">VIDAS: 3</div>
+</div>
+
+<div id="pantalla-fin">
+    <h1 id="titulo-fin">¡GAME OVER!</h1>
+    <p id="puntos-final" style="font-size: 24px;"></p>
+    <button onclick="reiniciar()">REINTENTAR</button>
+</div>
+
+<canvas id="juegoCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('juegoCanvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    // Variables de juego
+    let puntos = 0;
+    let vidas = 3;
+    let juegoActivo = true;
+    let teclas = {};
+    let enemigos = [];
+    let rayos = [];
+    let jefe = null;
+    let frame = 0;
+
+    // --- ENTIDADES ---
+
+    const pika = {
+        x: canvas.width / 2 - 25,
+        y: canvas.height - 80,
+        w: 50,
+        h: 50,
+        velocidad: 7,
+        dibujar() {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#ffff00";
+            // Cuerpo simplificado (Pikachu Neón)
+            ctx.fillStyle = "#ffff00";
+            ctx.fillRect(this.x + 10, this.y + 10, 30, 35); // Cuerpo
+            ctx.fillRect(this.x + 5, this.y - 5, 10, 20); // Oreja L
+            ctx.fillRect(this.x + 35, this.y - 5, 10, 20); // Oreja R
+            ctx.fillStyle = "#000";
+            ctx.fillRect(this.x + 5, this.y - 5, 10, 5); // Puntas orejas
+            ctx.fillRect(this.x + 35, this.y - 5, 10, 5);
+            ctx.fillStyle = "#ff0000"; // Mejillas
+            ctx.fillRect(this.x + 12, this.y + 25, 6, 6);
+            ctx.fillRect(this.x + 32, this.y + 25, 6, 6);
+            ctx.shadowBlur = 0;
+        }
+    };
+
+    class Rayo {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.w = 4;
+            this.h = 20;
+            this.v = 10;
+        }
+        dibujar() {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#00ffff";
+            ctx.fillStyle = "#00ffff";
+            ctx.fillRect(this.x - 2, this.y, this.w, this.h);
+        }
+    }
+
+    class Enemigo {
+        constructor(x, y, esJefe = false) {
+            this.x = x;
+            this.y = y;
+            this.esJefe = esJefe;
+            this.w = esJefe ? 100 : 40;
+            this.h = esJefe ? 120 : 40;
+            this.vida = esJefe ? 20 : 1;
+            this.v = esJefe ? 2 : 3 + (puntos / 1500);
+            this.color = esJefe ? "#a040ff" : "#ff0055"; // Jefe es tipo Psíquico (Morado)
+        }
+        dibujar() {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = this.color;
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 3;
+            // Forma de Peón/Enemigo Neón
+            ctx.strokeRect(this.x, this.y, this.w, this.h);
+            ctx.strokeRect(this.x + this.w*0.2, this.y - 10, this.w*0.6, 10);
+            if(this.esJefe) {
+                // Barra de vida del jefe
+                ctx.fillStyle = "#ff0000";
+                ctx.fillRect(this.x, this.y - 25, this.w, 8);
+                ctx.fillStyle = "#00ff00";
+                ctx.fillRect(this.x, this.y - 25, this.w * (this.vida/20), 8);
+            }
+        }
+    }
+
+    // --- LÓGICA ---
+
+    function spawmEnemigos() {
+        frame++;
+        // Aparece jefe cada 1000 puntos si no hay uno
+        if (puntos > 0 && puntos % 1000 === 0 && !jefe) {
+            jefe = new Enemigo(canvas.width / 2 - 50, -150, true);
+            enemigos.push(jefe);
+        }
+
+        // Aparece enemigo común
+        if (frame % 60 === 0 && (!jefe || Math.random() > 0.5)) {
+            let x = Math.random() * (canvas.width - 50);
+            enemigos.push(new Enemigo(x, -50));
+        }
+    }
+
+    function colision(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function actualizar() {
+        if (!juegoActivo) return;
+
+        // Movimiento Pikachu
+        if ((teclas['ArrowLeft'] || teclas['KeyA']) && pika.x > 0) pika.x -= pika.velocidad;
+        if ((teclas['ArrowRight'] || teclas['KeyD']) && pika.x < canvas.width - pika.w) pika.x += pika.velocidad;
+        if ((teclas['ArrowUp'] || teclas['KeyW']) && pika.y > canvas.height / 2) pika.y -= pika.velocidad;
+        if ((teclas['ArrowDown'] || teclas['KeyS']) && pika.y < canvas.height - pika.h) pika.y += pika.velocidad;
+
+        // Rayos
+        rayos.forEach((r, i) => {
+            r.y -= r.v;
+            if (r.y < -20) rayos.splice(i, 1);
+        });
+
+        // Enemigos
+        enemigos.forEach((e, i) => {
+            e.y += e.v;
+            if(e.esJefe) {
+                // Movimiento errático del jefe
+                e.x += Math.sin(frame / 20) * 5;
+                if(e.y > 100) e.v = 0.5; // El jefe baja lento
+            }
+
+            // Colisión Rayo -> Enemigo
+            rayos.forEach((r, ri) => {
+                if (colision(r, e)) {
+                    rayos.splice(ri, 1);
+                    e.vida--;
+                    if (e.vida <= 0) {
+                        if(e.esJefe) { jefe = null; puntos += 500; }
+                        else { puntos += 100; }
+                        enemigos.splice(i, 1);
+                        document.getElementById('puntos-txt').innerText = `PUNTOS: ${puntos}`;
+                    }
+                }
+            });
+
+            // Colisión Enemigo -> Pikachu
+            if (colision(e, pika)) {
+                vidas--;
+                enemigos.splice(i, 1);
+                if(e.esJefe) jefe = null;
+                document.getElementById('vidas-txt').innerText = `VIDAS: ${vidas}`;
+                if (vidas <= 0) morir();
+            }
+
+            if (e.y > canvas.height) {
+                enemigos.splice(i, 1);
+                if(!e.esJefe) {
+                    vidas--; // Los peones que escapan quitan vida
+                    document.getElementById('vidas-txt').innerText = `VIDAS: ${vidas}`;
+                    if (vidas <= 0) morir();
+                }
+            }
+        });
+
+        spawmEnemigos();
+    }
+
+    function dibujar() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        pika.dibujar();
+        rayos.forEach(r => r.dibujar());
+        enemigos.forEach(e => e.dibujar());
+
+        if (juegoActivo) requestAnimationFrame(() => {
+            actualizar();
+            dibujar();
+        });
+    }
+
+    function morir() {
+        juegoActivo = false;
+        document.getElementById('pantalla-fin').style.display = 'block';
+        document.getElementById('puntos-final').innerText = `PUNTUACIÓN: ${puntos}`;
+    }
+
+    function reiniciar() {
+        puntos = 0; vidas = 3; enemigos = []; rayos = []; jefe = null; frame = 0;
+        juegoActivo = true;
+        document.getElementById('puntos-txt').innerText = "PUNTOS: 0";
+        document.getElementById('vidas-txt').innerText = "VIDAS: 3";
+        document.getElementById('pantalla-fin').style.display = 'none';
+        pika.x = canvas.width / 2 - 25;
+        dibujar();
+    }
+
+    // Controles
+    window.addEventListener('keydown', e => {
+        teclas[e.code] = true;
+        if (e.code === 'Space' && juegoActivo) {
+            rayos.push(new Rayo(pika.x + pika.w / 2, pika.y));
+        }
+    });
+    window.addEventListener('keyup', e => teclas[e.code] = false);
+
+    dibujar();
+</script>
+</body>
+</html>

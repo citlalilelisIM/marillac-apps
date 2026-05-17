@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Grand Prix: Mónaco 2P</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            overflow: hidden;
+        }
+
+        #ui {
+            margin-top: 10px;
+            display: flex;
+            gap: 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 30px;
+            border-radius: 50px;
+            border: 2px solid #e10600; /* Rojo F1 */
+        }
+
+        .p1 { color: #3498db; } /* Azul */
+        .p2 { color: #f1c40f; } /* Amarillo/Dorado */
+
+        #game-canvas {
+            margin-top: 15px;
+            background-color: #444;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border: 4px solid #333;
+            cursor: crosshair;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            text-align: center;
+            border-radius: 15px;
+            border: 3px solid #e10600;
+            display: block;
+        }
+
+        button {
+            padding: 10px 25px;
+            font-size: 1.2rem;
+            background: #e10600;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        button:hover { background: #b80500; }
+
+        .controls-hint {
+            font-size: 0.8rem;
+            margin-top: 15px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="p1">JUGADOR 1 (WASD)</div>
+        <div id="timer">00.00s</div>
+        <div class="p2">JUGADOR 2 (FLECHAS)</div>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="overlay">
+        <h1 id="winner-text">GRAND PRIX DE MÓNACO</h1>
+        <p>¡Llega a la meta antes que tu rival!</p>
+        <button onclick="startGame()">INICIAR CARRERA</button>
+        <div class="controls-hint">
+            P1: W(Acelerar), S(Frenar), A/D(Girar)<br>
+            P2: Flechas (Arriba/Abajo/Izquierda/Derecha)
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const timerEl = document.getElementById('timer');
+    const overlay = document.getElementById('overlay');
+    const winnerText = document.getElementById('winner-text');
+
+    canvas.width = 1000;
+    canvas.height = 600;
+
+    let gameRunning = false;
+    let startTime = 0;
+    let keys = {};
+
+    // --- Configuración de los Coches ---
+    class Car {
+        constructor(x, y, color, controls) {
+            this.x = x;
+            this.y = y;
+            this.angle = Math.PI; // Mirando hacia la izquierda al inicio
+            this.speed = 0;
+            this.accel = 0.15;
+            this.friction = 0.97;
+            this.turnSpeed = 0.05;
+            this.color = color;
+            this.controls = controls; // {up, down, left, right}
+            this.width = 35;
+            this.height = 18;
+            this.finished = false;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+
+            // Chasis principal (Monoplaza F1)
+            ctx.fillStyle = this.color;
+            ctx.fillRect(-this.width/2, -this.height/4, this.width, this.height/2);
+            
+            // Alerón delantero
+            ctx.fillRect(this.width/2 - 5, -this.height/2, 5, this.height);
+            
+            // Alerón trasero
+            ctx.fillRect(-this.width/2, -this.height/2, 4, this.height);
+            
+            // Neumáticos
+            ctx.fillStyle = "#111";
+            ctx.fillRect(this.width/2 - 12, -this.height/2 - 2, 8, 4); // Del Izq
+            ctx.fillRect(this.width/2 - 12, this.height/2 - 2, 8, 4);  // Del Der
+            ctx.fillRect(-this.width/2 + 4, -this.height/2 - 3, 10, 5); // Tras Izq
+            ctx.fillRect(-this.width/2 + 4, this.height/2 - 2, 10, 5);  // Tras Der
+
+            // Casco del piloto
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(-2, 0, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            if (keys[this.controls.up]) this.speed += this.accel;
+            if (keys[this.controls.down]) this.speed -= this.accel * 0.5;
+
+            this.speed *= this.friction;
+
+            if (Math.abs(this.speed) > 0.1) {
+                const moveDir = this.speed > 0 ? 1 : -1;
+                if (keys[this.controls.left]) this.angle -= this.turnSpeed * moveDir;
+                if (keys[this.controls.right]) this.angle += this.turnSpeed * moveDir;
+            }
+
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed;
+
+            // Colisión con bordes del canvas
+            if(this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                this.speed *= 0.5;
+            }
+        }
+    }
+
+    const p1 = new Car(900, 480, '#3498db', {up: 'w', down: 's', left: 'a', right: 'd'});
+    const p2 = new Car(900, 520, '#f1c40f', {up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight'});
+
+    // --- Dibujo del Escenario ---
+    function drawBackground() {
+        // Cielo y Mar (Mónaco)
+        let sky = ctx.createLinearGradient(0, 0, 0, 200);
+        sky.addColorStop(0, '#3498db');
+        sky.addColorStop(1, '#87ceeb');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, 200);
+
+        // Agua (Puerto)
+        ctx.fillStyle = '#1e3799';
+        ctx.fillRect(250, 80, 500, 100);
+        // Yates simples
+        ctx.fillStyle = 'white';
+        ctx.fillRect(300, 100, 40, 15);
+        ctx.fillRect(450, 110, 60, 20);
+
+        // Edificios en la ladera
+        ctx.fillStyle = '#f3e5ab';
+        ctx.fillRect(50, 50, 60, 150);
+        ctx.fillRect(120, 30, 80, 170);
+        ctx.fillRect(800, 40, 100, 160);
+    }
+
+    function drawTrack() {
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 90;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        // Punto de salida (Abajo Derecha)
+        ctx.moveTo(900, 500); 
+        // Recta de meta
+        ctx.lineTo(200, 500); 
+        // Curva Santa Devota
+        ctx.lineTo(100, 400); 
+        // Subida al Casino
+        ctx.lineTo(300, 300);
+        // Curva Mirabeau
+        ctx.lineTo(800, 300);
+        // El túnel
+        ctx.lineTo(900, 200);
+        // Chicane del puerto
+        ctx.lineTo(150, 200); 
+        // Meta (Arriba Izquierda)
+        ctx.stroke();
+
+        // Líneas laterales (Pianos rojo/blanco)
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 95;
+        ctx.setLineDash([20, 20]);
+        ctx.stroke();
+        ctx.strokeStyle = '#e10600';
+        ctx.lineWidth = 95;
+        ctx.lineDashOffset = 20;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Relleno pista asfalto
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 80;
+        ctx.stroke();
+
+        // Línea de Meta
+        ctx.fillStyle = "white";
+        ctx.fillRect(150, 160, 10, 80);
+    }
+
+    // --- Lógica de Juego ---
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    function checkWinner() {
+        // Meta está en x < 160 en la parte superior de la pista (y aprox 200)
+        [p1, p2].forEach((p, index) => {
+            if (!p.finished && p.x < 160 && p.y < 250 && p.y > 150) {
+                p.finished = true;
+                gameRunning = false;
+                winnerText.innerText = `¡GANA EL JUGADOR ${index + 1}!`;
+                winnerText.style.color = p.color;
+                overlay.style.display = 'block';
+            }
+        });
+    }
+
+    function startGame() {
+        p1.x = 900; p1.y = 480; p1.speed = 0; p1.angle = Math.PI; p1.finished = false;
+        p2.x = 900; p2.y = 520; p2.speed = 0; p2.angle = Math.PI; p2.finished = false;
+        startTime = Date.now();
+        gameRunning = true;
+        overlay.style.display = 'none';
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop() {
+        if (!gameRunning) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawBackground();
+        drawTrack();
+
+        p1.update();
+        p2.update();
+
+        p1.draw();
+        p2.draw();
+
+        checkWinner();
+
+        // Timer
+        let elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+        timerEl.innerText = elapsed + "s";
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Dibujo inicial
+    drawBackground();
+    drawTrack();
+    p1.draw();
+    p2.draw();
+
+</script>
+</body>
+</html>

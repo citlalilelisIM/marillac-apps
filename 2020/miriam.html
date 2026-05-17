@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starry Striker - Pastel Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #1a1625; /* Violeta pastel muy oscuro */
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: #ffb7b2; /* Rosa pastel suave */
+            text-shadow: 0 0 10px #ffb7b2, 0 0 20px #ffc6ff;
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        /* Contenedor del juego */
+        #game-container {
+            position: relative;
+            border: 4px solid #ffb7b2;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(255, 183, 178, 0.5), inset 0 0 15px rgba(255, 198, 255, 0.2);
+            background-color: #120e1a;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 11px;
+        }
+
+        /* Pantallas superpuestas (Overlay) */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(26, 22, 37, 0.9);
+            border-radius: 11px;
+            transition: opacity 0.3s ease;
+        }
+
+        .hidden {
+            display: none !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .overlay h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .title-neon {
+            color: #ffc6ff; /* lila pastel */
+            text-shadow: 0 0 10px #ffc6ff, 0 0 20px #ffb7b2;
+        }
+
+        .gameover-neon {
+            color: #ffb7b2;
+            text-shadow: 0 0 10px #ffb7b2, 0 0 20px #ff9aa2;
+            animation: pulse 1.5s infinite;
+        }
+
+        .overlay p {
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            color: #e2f0cb; /* verde pastel */
+            text-shadow: 0 0 5px rgba(226, 240, 203, 0.5);
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .btn-neon {
+            padding: 12px 30px;
+            font-family: inherit;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffb7b2;
+            background: transparent;
+            border: 2px solid #ffb7b2;
+            border-radius: 20px; /* Bordes más redondeados para estilo cute */
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 183, 178, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .btn-neon:hover {
+            background-color: #ffb7b2;
+            color: #1a1625;
+            box-shadow: 0 0 20px #ffb7b2, 0 0 30px #ffc6ff;
+            transform: scale(1.05);
+        }
+
+        /* Instrucciones debajo */
+        .instructions {
+            margin-top: 15px;
+            color: #ffc6ff;
+            opacity: 0.8;
+            font-size: 0.9rem;
+            text-align: center;
+            text-shadow: 0 0 2px rgba(255, 198, 255, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>STARRY STRIKER</h1>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="600" height="700"></canvas>
+
+        <div id="start-screen" class="overlay">
+            <h2 class="title-neon">¡COMIENZA EL VIAJE!</h2>
+            <p>Controles:<br>Moverse: Flechas o WASD<br>Disparar: Barra Espaciadora</p>
+            <button class="btn-neon" id="start-btn">EMPEZAR ✨</button>
+        </div>
+
+        <div id="gameover-screen" class="overlay hidden">
+            <h2 class="gameover-neon">FIN DEL VIAJE</h2>
+            <p id="final-score-text">Puntuación: 0</p>
+            <button class="btn-neon" id="restart-btn">REINTENTAR ✨ (R)</button>
+        </div>
+    </div>
+
+    <div class="instructions">
+        Moverse: Flechas/WASD • Disparar: Espacio • Estilo Estrellas Rosa Pastel
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Pantallas e interfaces
+        const startScreen = document.getElementById('start-screen');
+        const gameoverScreen = document.getElementById('gameover-screen');
+        const finalScoreText = document.getElementById('final-score-text');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // --- PARÁMETROS DEL JUEGO ---
+        let gameActive = false;
+        let score = 0;
+        let lives = 3;
+        let wave = 1;
+        
+        // Teclas activas
+        const keys = {};
+
+        // --- FUNCIÓN UTILITARIA PARA DIBUJAR ESTRELLAS ---
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius, fillStyle, strokeStyle, lineWidth) {
+            let rot = Math.PI / 2 * 3;
+            let x = cx;
+            let y = cy;
+            let step = Math.PI / spikes;
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - outerRadius);
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius;
+                y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+
+                x = cx + Math.cos(rot) * innerRadius;
+                y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+            }
+            ctx.lineTo(cx, cy - outerRadius);
+            ctx.closePath();
+
+            if (fillStyle) {
+                ctx.fillStyle = fillStyle;
+                ctx.fill();
+            }
+            if (strokeStyle) {
+                ctx.strokeStyle = strokeStyle;
+                ctx.lineWidth = lineWidth || 1;
+                ctx.stroke();
+            }
+        }
+
+        // --- CLASES DE ENTIDADES ---
+
+        class Player {
+            constructor() {
+                this.width = 40;
+                this.height = 40;
+                this.x = canvas.width / 2;
+                this.y = canvas.height - 70;
+                this.speed = 6;
+                this.color = '#ffc6ff'; // Lila pastel brillante
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                
+                // El jugador es una hermosa estrella lila de 5 puntas
+                drawStar(this.x, this.y, 5, 20, 9, '#4d2d52', this.color, 3);
+                
+                // Brillo interior blanco
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            update() {
+                // Movimiento horizontal y vertical
+                if (keys['ArrowLeft'] || keys['KeyA']) this.x -= this.speed;
+                if (keys['ArrowRight'] || keys['KeyD']) this.x += this.speed;
+                if (keys['ArrowUp'] || keys['KeyW']) this.y -= this.speed;
+                if (keys['ArrowDown'] || keys['KeyS']) this.y += this.speed;
+
+                // Colisiones con los bordes (considerando el centro de la estrella)
+                if (this.x < 20) this.x = 20;
+                if (this.x > canvas.width - 20) this.x = canvas.width - 20;
+                if (this.y < canvas.height / 2) this.y = canvas.height / 2;
+                if (this.y > canvas.height - 20) this.y = canvas.height - 20;
+            }
+        }
+
+        class Bullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 4;
+                this.speed = 9;
+                this.color = '#ffd1dc'; // Rosa chicle pastel muy claro
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = '#ffffff'; // Centro blanco brillante
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            update() {
+                this.y -= this.speed;
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, speedY) {
+                this.radius = 16;
+                this.x = x;
+                this.y = y;
+                this.speedX = (Math.random() - 0.5) * 2;
+                this.speedY = speedY;
+                this.color = '#ffb7b2'; // Rosa pastel suave
+            }
+
+            draw() {
+                ctx.save();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                
+                // Los enemigos son estrellas rebeldes rosa pastel
+                drawStar(this.x, this.y, 5, this.radius, this.radius / 2.2, '#502028', this.color, 3);
+                ctx.restore();
+            }
+
+            update() {
+                this.y += this.speedY;
+                this.x += this.speedX;
+
+                // Rebotar en bordes
+                if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
+                    this.speedX = -this.speedX;
+                }
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = Math.random() * 6 + 3;
+                this.speedX = (Math.random() - 0.5) * 5;
+                this.speedY = (Math.random() - 0.5) * 5;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.02 + 0.01;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.shadowBlur = 4;
+                ctx.shadowColor = this.color;
+                // Partículas que explotan con forma de mini estrellas
+                drawStar(this.x, this.y, 5, this.size, this.size / 2, this.color, null);
+                ctx.restore();
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.alpha -= this.decay;
+            }
+        }
+
+        // Listas de entidades
+        let player;
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+        let lastShotTime = 0;
+        const shotCooldown = 220;
+
+        // --- SISTEMA DE OLEADAS Y SPAWN ---
+        function spawnWave() {
+            const enemyCount = 4 + wave * 2;
+            const enemySpeed = 1.3 + wave * 0.25;
+
+            for (let i = 0; i < enemyCount; i++) {
+                const x = Math.random() * (canvas.width - 40) + 20;
+                const y = -Math.random() * 300 - 30;
+                enemies.push(new Enemy(x, y, enemySpeed));
+            }
+        }
+
+        function createExplosion(x, y, color) {
+            // Paleta de colores súper dulces para la explosión pastel
+            const colors = [color, '#ffc6ff', '#ffd1dc', '#fffffc', '#bdb2ff'];
+            for (let i = 0; i < 15; i++) {
+                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                particles.push(new Particle(x, y, randomColor));
+            }
+        }
+
+        // --- DETECCIÓN DE COLISIONES ---
+        function checkCollisions() {
+            // Bala golpea a Enemigo estrella
+            for (let bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
+                for (let eIndex = enemies.length - 1; eIndex >= 0; eIndex--) {
+                    const b = bullets[bIndex];
+                    const e = enemies[eIndex];
+
+                    if (b && e) {
+                        const dist = Math.hypot(b.x - e.x, b.y - e.y);
+                        if (dist < e.radius + b.radius) {
+                            createExplosion(e.x, e.y, e.color);
+                            enemies.splice(eIndex, 1);
+                            bullets.splice(bIndex, 1);
+                            score += 100;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Enemigo colisiona con el Jugador estrella
+            for (let eIndex = enemies.length - 1; eIndex >= 0; eIndex--) {
+                const e = enemies[eIndex];
+                const dist = Math.hypot(player.x - e.x, player.y - e.y);
+                
+                if (dist < e.radius + 15) {
+                    createExplosion(player.x, player.y, '#ff9aa2'); // Explosión lila/rosa suave
+                    enemies.splice(eIndex, 1);
+                    lives--;
+
+                    if (lives <= 0) endGame();
+                    break;
+                }
+
+                // El enemigo pasa el límite inferior
+                if (e.y - e.radius > canvas.height) {
+                    enemies.splice(eIndex, 1);
+                    lives--;
+                    if (lives <= 0) endGame();
+                }
+            }
+        }
+
+        // --- INTERFAZ DEL PANEL (HUD) ---
+        function drawHUD() {
+            ctx.save();
+            ctx.font = 'bold 15px "Courier New"';
+            
+            // Puntos (Rosa Claro)
+            ctx.fillStyle = '#ffb7b2';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#ffb7b2';
+            ctx.fillText(`PUNTOS: ${score}`, 20, 30);
+
+            // Oleada actual (Morado Pastel)
+            ctx.fillStyle = '#ffc6ff';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#ffc6ff';
+            ctx.fillText(`OLEADA: ${wave}`, canvas.width / 2 - 40, 30);
+
+            // Vidas (Corazones Rosa)
+            ctx.fillStyle = '#ff9aa2';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#ff9aa2';
+            ctx.fillText(`VIDAS: ${'💖'.repeat(lives)}`, canvas.width - 150, 30);
+            
+            ctx.restore();
+        }
+
+        // --- BUCLE PRINCIPAL DEL JUEGO ---
+        function gameLoop() {
+            if (!gameActive) return;
+
+            // Limpieza y fondo del Canvas
+            ctx.fillStyle = '#120e1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Estrellas titilantes de fondo (Estética espacial mágica)
+            for (let i = 0; i < 20; i++) {
+                const x = (Math.sin(Date.now() * 0.0008 + i) * 0.5 + 0.5) * canvas.width;
+                const y = ((Date.now() * 0.03 + i * 120) % canvas.height);
+                ctx.fillStyle = i % 2 === 0 ? '#ffb7b2' : '#ffc6ff';
+                ctx.fillRect(x, y, 1.5, 1.5);
+            }
+
+            // Disparar bala
+            if (keys['Space']) {
+                const now = Date.now();
+                if (now - lastShotTime > shotCooldown) {
+                    bullets.push(new Bullet(player.x, player.y - 10));
+                    lastShotTime = now;
+                }
+            }
+
+            // Actualizar y Dibujar el Jugador
+            player.update();
+            player.draw();
+
+            // Procesar Balas
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].update();
+                bullets[i].draw();
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+
+            // Procesar Enemigos
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].update();
+                enemies[i].draw();
+            }
+
+            // Procesar Partículas
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].alpha <= 0) particles.splice(i, 1);
+            }
+
+            // Manejo de oleadas
+            if (enemies.length === 0) {
+                wave++;
+                spawnWave();
+            }
+
+            // Colisiones e Interfaz
+            checkCollisions();
+            drawHUD();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- GESTIÓN DE ESTADOS ---
+        function startGame() {
+            score = 0;
+            lives = 3;
+            wave = 1;
+            bullets = [];
+            enemies = [];
+            particles = [];
+            
+            player = new Player();
+            spawnWave();
+            
+            startScreen.classList.add('hidden');
+            gameoverScreen.classList.add('hidden');
+            gameActive = true;
+            gameLoop();
+        }
+
+        function endGame() {
+            gameActive = false;
+            finalScoreText.textContent = `Puntuación Mágica: ${score}`;
+            gameoverScreen.classList.remove('hidden');
+        }
+
+        // --- EVENTOS DEL TECLADO ---
+        window.addEventListener('keydown', (e) => {
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault();
+            }
+            keys[e.code] = true;
+
+            // Reinicio rápido con la tecla 'R'
+            if (!gameActive && !gameoverScreen.classList.contains('hidden') && e.code === 'KeyR') {
+                startGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // Eventos de botones
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+    </script>
+</body>
+</html>
