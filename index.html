@@ -111,14 +111,6 @@
       margin-top:60px;
       color:#94a3b8;
     }
-
-    .error-message{
-      background:#7f1d1d;
-      border:1px solid #ef4444;
-      border-radius:12px;
-      padding:20px;
-      text-align:center;
-    }
   </style>
 </head>
 
@@ -133,6 +125,7 @@
 
     <!-- BOTONES DE DIRECTORIOS -->
     <div class="folders">
+      <!-- IMPORTANTE: Cada botón debe tener su etiqueta de cierre -->
       <div class="folder-btn" onclick="showFolder('2010')">
         📁 Grupo 2010
       </div>
@@ -167,136 +160,128 @@
 
   <script>
 
-    // =============================================
-    // CONFIGURACIÓN DE DIRECTORIOS Y ARCHIVOS HTML
-    // =============================================
-    // ACTUALIZA ESTA LISTA CON TUS ARCHIVOS REALES
-    
+    // CONFIGURACION DE DIRECTORIOS Y ARCHIVOS HTML
     const folders = {
-
-      // Directorio 2010 - Actualiza con tus archivos reales
-      2010: [
-        { title: "Proyecto 1", file: "2010/proyecto1.html" },
-        { title: "Proyecto 2", file: "2010/proyecto2.html" },
-        { title: "Proyecto 3", file: "2010/proyecto3.html" }
+        2010: [
+        {
+          title: "Proyecto A",
+          file: "2010/proyecto_a/index.html"
+        },
+        {
+          title: "Proyecto B",
+          file: "2010/proyecto_b/index.html"
+        },
+        {
+          title: "Proyecto C",
+          file: "2010/proyecto_c/index.html"
+        }
       ],
 
-      // Directorio 2020 - PON AQUÍ TUS ARCHIVOS HTML REALES
       2020: [
-        { title: "Alan", file: "2020/alan.html" },
-        { title: "Aldo", file: "2020/aldo.html" }
-        // Agrega más archivos aquí según necesites:
-        // { title: "Nombre del proyecto", file: "2020/nombre_archivo.html" }
+        {
+          title: "Alan",
+          file: "2020/alan.html"
+        },
+        {
+          title: "Aldo",
+          file: "2020/aldo.html"
+        },
+        {
+          title: "Alexis",
+          file: "2020/alexis.html"
+        },
+        {
+          title: "Alonso",
+          file: "2020/alonso.html"
+        },
+        {
+          title: "América",
+          file: "2020/america.html"
+        },
+        {
+          title: "Camila",
+          file: "2020/camila.html"
+        },
+        {
+          title: "Emmanuel",
+          file: "2020/emmanuel.html"
+        },
+        {
+          title: "Fernanda Yunuen",
+          file: "2020/feryunuen.html"
+        },
+        {
+          title: "Giovanni",
+          file: "2020/giovanni.html"
+        },
+        {
+          title: "Ismael",
+          file: "2020/ismael.html"
+        }
       ],
 
-      // Directorio 2030
       2030: [
-        { title: "Clima", file: "2030/clima/index.html" }
-        // Si los archivos están directamente en la carpeta 2030, usa:
-        // { title: "Clima", file: "2030/clima.html" }
+        {
+          title: "Clima",
+          file: "grupo3/clima/index.html"
+        }
       ],
 
-      // Directorio 2040
       2040: [
-        { title: "Galería", file: "2040/galeria/index.html" }
-        // Si los archivos están directamente en la carpeta 2040, usa:
-        // { title: "Galería", file: "2040/galeria.html" }
+        {
+          title: "Galería",
+          file: "grupo4/galeria/index.html"
+        }
       ]
 
     };
-
-    // Función para verificar si un archivo existe (opcional)
-    async function checkFileExists(url) {
-      try {
-        const response = await fetch(url, { method: 'HEAD' });
-        return response.ok;
-      } catch(error) {
-        return false;
-      }
-    }
 
     function showFolder(folderName){
 
       const container = document.getElementById("apps-container");
 
-      // Verificar si el folder existe en nuestra configuración
-      if (!folders[folderName]) {
-        container.innerHTML = `
-          <h2 class="section-title">
-            Directorio: ${folderName}
-          </h2>
-          <div class="error-message">
-            <h3>⚠️ Directorio no configurado</h3>
-            <p>Este directorio aún no tiene proyectos registrados en la configuración.</p>
-          </div>
-        `;
-        return;
-      }
-
-      // Verificar si el folder tiene proyectos
-      if (folders[folderName].length === 0) {
+      // Pequeña validación: si el folder no existe o está vacío, mostramos un mensaje
+      if (!folders[folderName] || folders[folderName].length === 0) {
         container.innerHTML = `
           <h2 class="section-title">
             Directorio: ${folderName}
           </h2>
           <div class="apps">
             <div class="card">
-              <h3>📂 No hay proyectos disponibles</h3>
-              <p>Este directorio aún no tiene archivos HTML configurados.</p>
-              <small>Agrega los proyectos en la sección "folders" del código.</small>
+              <h3>No hay proyectos disponibles</h3>
+              <p>Este directorio aún no tiene aplicaciones configuradas.</p>
             </div>
           </div>
         `;
         return;
       }
 
-      // Construir el HTML con las aplicaciones
       let html = `
         <h2 class="section-title">
-          📁 Directorio: ${folderName}
+          Directorio: ${folderName}
         </h2>
+
         <div class="apps">
       `;
 
-      // Agregar cada proyecto
-      folders[folderName].forEach((app, index) => {
+      folders[folderName].forEach(app => {
+
         html += `
           <div class="card">
-            <h3>📄 ${app.title}</h3>
-            <a href="${app.file}" target="_blank" rel="noopener noreferrer">
-              🔗 Abrir Proyecto
+            <h3>${app.title}</h3>
+
+            <a href="${app.file}" target="_blank">
+              Abrir Proyecto
             </a>
           </div>
         `;
+
       });
 
       html += `</div>`;
-      
-      // Agregar un mensaje informativo
-      html += `
-        <div style="margin-top: 20px; padding: 15px; background: #0f172a; border-radius: 12px; font-size: 0.9rem; color: #94a3b8; text-align: center;">
-          💡 Los proyectos se abrirán en una nueva pestaña. Si ves un error 404, verifica que la ruta del archivo sea correcta.
-        </div>
-      `;
 
       container.innerHTML = html;
     }
-
-    // Función para agregar nuevos proyectos dinámicamente (opcional)
-    function addProjectToFolder(folderName, title, filePath) {
-      if (!folders[folderName]) {
-        folders[folderName] = [];
-      }
-      folders[folderName].push({ title: title, file: filePath });
-      console.log(`✅ Proyecto "${title}" agregado a ${folderName}`);
-    }
-
-    // Ejemplo de cómo agregar más proyectos desde la consola del navegador:
-    // addProjectToFolder('2020', 'Nuevo Proyecto', '2020/nuevo.html');
-
-    // Mostrar mensaje en consola para ayudar al desarrollador
-    console.log('📚 Configuración actual de directorios:', folders);
-    console.log('💡 Para agregar más proyectos, edita el objeto "folders" en el código o usa addProjectToFolder()');
 
   </script>
 
