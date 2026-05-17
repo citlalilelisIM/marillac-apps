@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Café | Artisan Barista 3D</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #f5f2ed;
+            --oak: #3d2b1f;
+            --hunter-green: #1e3932;
+            --gold: #c5a059;
+            --marble: #ffffff;
+            --slate: #2f3542;
+        }
+
+        * { box-sizing: border-box; }
+        body, html { 
+            margin: 0; padding: 0; height: 100vh; overflow: hidden; 
+            font-family: 'Montserrat', sans-serif; background: var(--cream); 
+        }
+
+        /* UI SUPERIOR */
+        #header {
+            position: absolute; top: 0; width: 100%; height: 80px; background: white;
+            display: flex; justify-content: space-around; align-items: center;
+            border-bottom: 2px solid var(--gold); z-index: 100;
+        }
+        .stat-box { text-align: center; }
+        .stat-label { font-size: 10px; letter-spacing: 2px; color: var(--gold); text-transform: uppercase; }
+        .stat-val { font-size: 24px; font-weight: 700; color: var(--hunter-green); }
+
+        /* ESCENA 3D */
+        #main-container { height: 100%; display: flex; flex-direction: column; perspective: 1200px; }
+
+        /* CLIENTE REALISTA */
+        #customer-view {
+            height: 45%; background: linear-gradient(to bottom, #dcd7ca, var(--cream));
+            display: flex; justify-content: center; align-items: flex-end; position: relative;
+        }
+        .customer-avatar {
+            width: 200px; height: 320px; transition: 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 15px 30px rgba(0,0,0,0.2));
+        }
+
+        /* PIZARRA DE RECETAS (GUIADO) */
+        #chalkboard {
+            position: absolute; left: 20px; top: 100px; background: #2c2c2c; color: white;
+            padding: 15px; border: 4px solid #4a4a4a; border-radius: 4px; width: 180px;
+            font-family: 'Playfair Display'; font-size: 13px; box-shadow: 5px 5px 15px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+
+        /* BARRA DE STARBUCKS 3D */
+        #counter {
+            height: 55%; background: var(--marble); position: relative;
+            transform-style: preserve-3d; transform: rotateX(12deg);
+            border-top: 12px solid var(--oak); box-shadow: inset 0 20px 60px rgba(0,0,0,0.1);
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; padding: 20px 80px;
+        }
+
+        .station {
+            background: #fdfdfd; border-radius: 6px; border: 1px solid #eee;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; transition: 0.3s; position: relative; box-shadow: 0 8px 0 #ddd;
+        }
+        .station:hover { transform: translateZ(15px) translateY(-5px); border-color: var(--gold); }
+        .station:active { transform: translateY(4px); box-shadow: 0 2px 0 #ddd; }
+        .station span { font-size: 45px; margin-bottom: 5px; }
+        .station label { font-size: 10px; font-weight: 700; color: var(--hunter-green); text-align: center; }
+
+        /* ESTADO PROCESANDO */
+        .working::after {
+            content: "PREPARANDO..."; position: absolute; inset: 0; background: rgba(255,255,255,0.85);
+            display: flex; align-items: center; justify-content: center; font-size: 9px;
+            font-weight: 800; color: var(--gold); animation: pulse 1s infinite; border-radius: 6px;
+        }
+
+        /* BANDEJA DE PREPARACIÓN */
+        #tray-area {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 450px; height: 90px; background: rgba(255,255,255,0.9);
+            border: 2px solid var(--gold); border-radius: 50px; display: flex;
+            align-items: center; justify-content: center; gap: 12px; z-index: 200;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .tray-item { font-size: 32px; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        /* TIMER */
+        #timer-wrap { position: absolute; bottom: 0; left: 0; width: 100%; height: 8px; background: #eee; }
+        #timer-fill { height: 100%; background: var(--hunter-green); width: 100%; transition: width linear; }
+
+        /* OVERLAY INICIAL */
+        #overlay {
+            position: fixed; inset: 0; background: var(--hunter-green);
+            z-index: 1000; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; color: white; text-align: center;
+        }
+        .btn-play {
+            background: transparent; border: 1px solid var(--gold); color: white;
+            padding: 18px 60px; cursor: pointer; font-family: 'Montserrat';
+            letter-spacing: 4px; font-weight: 600; margin-top: 30px; transition: 0.4s;
+        }
+        .btn-play:hover { background: var(--gold); color: var(--hunter-green); }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="font-family: 'Playfair Display'; font-size: 65px; margin: 0;">La Café</h1>
+        <p style="letter-spacing: 6px; font-weight: 300;">ARTISAN 3D EXPERIENCE</p>
+        <button class="btn-play" onclick="startGame()">INICIAR TURNO</button>
+    </div>
+
+    <div id="header">
+        <div class="stat-box"><div class="stat-label">Earnings</div><div class="stat-val">$<span id="coins">0</span></div></div>
+        <div class="stat-box"><div class="stat-label">Barista Rank</div><div class="stat-val" id="rank">Novice</div></div>
+        <button onclick="deliverOrder()" style="background:var(--hunter-green); color:white; border:none; padding:12px 35px; border-radius:4px; cursor:pointer; font-weight:700;">SERVIR</button>
+    </div>
+
+    <div id="main-container">
+        <div id="customer-view">
+            <div id="chalkboard">
+                <small style="color:var(--gold)">ORDER MANUAL:</small>
+                <div id="recipe-name" style="font-weight: 700; margin: 5px 0;">Esperando cliente...</div>
+                <div id="recipe-list" style="font-size: 11px; opacity: 0.8;"></div>
+            </div>
+            <div id="customer-box"></div>
+            <div id="timer-wrap"><div id="timer-fill"></div></div>
+        </div>
+
+        <div id="counter">
+            <div class="station" onclick="addToTray('🥤')"><span>🥤</span><label>VASOS</label></div>
+            <div class="station" id="tap" onclick="process('🚰', 'tap', 1500)"><span>🚰</span><label>GRIFO</label></div>
+            <div class="station" id="coffee" onclick="process('☕', 'coffee', 2500)"><span>☕</span><label>CAFETERA</label></div>
+            <div class="station" id="blender" onclick="process('🌪️', 'blender', 3000)"><span>🌪️</span><label>LICUADORA</label></div>
+            
+            <div class="station" onclick="addToTray('🍵')"><span>🍵</span><label>MATCHA</label></div>
+            <div class="station" onclick="addToTray('🌿')"><span>🌿</span><label>CHAI</label></div>
+            <div class="station" onclick="addToTray('🥛')"><span>🥛</span><label>LECHE</label></div>
+            <div class="station" onclick="addToTray('🧊')"><span>🧊</span><label>HIELO</label></div>
+            <div class="station" onclick="addToTray('🍰')"><span>🍰</span><label>PASTEL</label></div>
+            <div class="station" onclick="clearTray()" style="background:#fff2f2"><span>🧹</span><label>LIMPIAR</label></div>
+        </div>
+    </div>
+
+    <div id="tray-area"></div>
+
+    <script>
+        let money = 0; let level = 1; let tray = []; let activeOrder = null; let timer;
+
+        const recipes = [
+            { name: "Café Clásico", code: ['🥤', '🚰', '☕'], hint: "Vaso + Grifo + Cafetera" },
+            { name: "Matcha Latte", code: ['🥤', '🥛', '🍵', '🌪️'], hint: "Vaso + Leche + Matcha + Licuar" },
+            { name: "Chai Especial", code: ['🥤', '🥛', '🌿'], hint: "Vaso + Leche + Chai" },
+            { name: "Capuchino", code: ['🥤', '☕', '🥛'], hint: "Vaso + Cafetera + Leche" },
+            { name: "Combo Pastel", code: ['🍰', '☕'], hint: "Pastel + Cafetera" }
+        ];
+
+        // AUDIO ENGINE
+        const audio = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(freq, type, dur, vol = 0.1) {
+            const o = audio.createOscillator(); const g = audio.createGain();
+            o.type = type; o.frequency.value = freq;
+            g.gain.setValueAtTime(vol, audio.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+            o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + dur);
+        }
+
+        function startGame() {
+            document.getElementById('overlay').style.display = 'none';
+            newCustomer();
+        }
+
+        function newCustomer() {
+            tray = []; updateTray();
+            activeOrder = recipes[Math.floor(Math.random() * recipes.length)];
+            
+            document.getElementById('recipe-name').innerText = activeOrder.name;
+            document.getElementById('recipe-list').innerText = activeOrder.hint;
+
+            // Avatares Realistas SVG
+            const isMan = Math.random() > 0.5;
+            document.getElementById('customer-box').innerHTML = `
+                <svg class="customer-avatar" viewBox="0 0 100 150">
+                    <circle cx="50" cy="35" r="25" fill="#e0ac69" />
+                    <path d="M20,150 Q20,65 50,65 Q80,65 80,150" fill="${isMan ? '#2c3e50' : '#5d4037'}" />
+                </svg>`;
+
+            const bar = document.getElementById('timer-fill');
+            const limit = Math.max(5000, 16000 - (level * 1000));
+            bar.style.transition = 'none'; bar.style.width = '100%';
+            setTimeout(() => { bar.style.transition = `width ${limit}ms linear`; bar.style.width = '0%'; }, 50);
+
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                playSfx(100, 'sawtooth', 0.5);
+                alert("The customer left!");
+                newCustomer();
+            }, limit);
+        }
+
+        function addToTray(item) {
+            if(tray.length < 5) {
+                tray.push(item);
+                updateTray();
+                playSfx(600, 'sine', 0.1);
+            }
+        }
+
+        function process(item, id, ms) {
+            const el = document.getElementById(id);
+            if(el.classList.contains('working')) return;
+            el.classList.add('working');
+            playSfx(200, 'square', ms/1000, 0.05);
+            setTimeout(() => {
+                el.classList.remove('working');
+                addToTray(item);
+                playSfx(900, 'sine', 0.2);
+            }, ms);
+        }
+
+        function updateTray() {
+            document.getElementById('tray-area').innerHTML = tray.map(i => `<span class="tray-item">${i}</span>`).join('');
+        }
+
+        function clearTray() {
+            tray = []; updateTray(); playSfx(300, 'triangle', 0.2);
+        }
+
+        function deliverOrder() {
+            const win = JSON.stringify(tray) === JSON.stringify(activeOrder.code);
+            if(win) {
+                clearTimeout(timer);
+                money += 20;
+                document.getElementById('coins').innerText = money;
+                playSfx(880, 'sine', 0.1);
+                setTimeout(() => playSfx(1200, 'sine', 0.2), 80);
+                
+                if(money % 100 === 0) {
+                    level++;
+                    const ranks = ["Novice", "Junior", "Artisan", "Coffee Master"];
+                    document.getElementById('rank').innerText = ranks[Math.min(level-1, 3)];
+                }
+                newCustomer();
+            } else {
+                playSfx(150, 'square', 0.4);
+                alert("Wrong recipe! Try again.");
+            }
+        }
+    </script>
+</body>
+</html>

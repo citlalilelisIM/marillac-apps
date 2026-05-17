@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Robo en Ecatepec: Machete & Plomo</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #333; font-family: 'Arial Black', sans-serif; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 10px; left: 10px; color: #fff;
+            background: rgba(0,0,0,0.7); padding: 15px; border: 3px solid #666;
+            pointer-events: none; min-width: 250px;
+        }
+        .hp-container { width: 100%; height: 20px; background: #400; border: 1px solid #fff; margin: 5px 0; }
+        #hp-fill { height: 100%; background: #f00; width: 100%; transition: width 0.2s; }
+        .mission-log { color: #f1c40f; font-size: 14px; margin-top: 10px; border-top: 1px solid #555; padding-top: 5px; }
+        #weapon-info { font-size: 18px; color: #0f0; }
+        #msg-box {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: red; font-size: 50px; text-shadow: 3px 3px #000; display: none;
+        }
+        .controls { font-size: 11px; color: #aaa; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div style="font-size: 24px; color: #f1c40f;">ROBO EN ECATEPEC</div>
+    <div class="hp-container"><div id="hp-fill"></div></div>
+    <div>DINERO: $<span id="cash">0</span></div>
+    <div id="weapon-info">EQUIPADO: MACHETE</div>
+    <div id="mission-text" class="mission-log">MISIÓN: Roba un vehículo para moverte.</div>
+    <div class="controls">1-4: Armas | F: Robar Auto | WASD: Mover | Click: Ataque</div>
+</div>
+
+<div id="msg-box">¡VALISTE!</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// --- CONFIGURACIÓN DE ARMAS ---
+const WEAPONS = {
+    1: { name: "MACHETE", type: "melee", range: 45, damage: 60, color: "#e5e5e5", desmembra: true },
+    2: { name: "PISTOLA 9mm", type: "gun", cooldown: 350, damage: 30, color: "#444", bulletSpeed: 12 },
+    3: { name: "AK-47", type: "gun", cooldown: 110, damage: 20, color: "#631", bulletSpeed: 15 },
+    4: { name: "ESCOPETA", type: "gun", cooldown: 800, damage: 15, color: "#222", bullets: 6 }
+};
+
+// --- ESTADO DEL JUEGO ---
+let player = {
+    x: 400, y: 400, angle: 0, hp: 100, cash: 0,
+    weapon: WEAPONS[1], inCar: null, lastAttack: 0
+};
+
+let entities = []; // Peatones y enemigos
+let cars = [];
+let bullets = [];
+let particles = []; // Sangre y partes del cuerpo
+let camera = { x: 0, y: 0 };
+let keys = {};
+let missionStep = 0;
+
+// --- INICIALIZACIÓN ---
+function init() {
+    // Generar Ciudad
+    for(let i=0; i<30; i++) spawnEntity(Math.random() < 0.2); // 20% enemigos
+    for(let i=0; i<8; i++) spawnCar();
+}
+
+function spawnEntity(isEnemy) {
+    entities.push({
+        x: Math.random() * 3000, y: Math.random() * 3000,
+        angle: Math.random() * 6, hp: 100, 
+        isEnemy: isEnemy, color: isEnemy ? '#111' : '#'+Math.floor(Math.random()*16777215).toString(16),
+        parts: { head: true, armL: true, armR: true },
+        targetX: Math.random() * 3000, targetY: Math.random() * 3000
+    });
+}
+
+function spawnCar() {
+    cars.push({
+        x: Math.random() * 3000, y: Math.random() * 3000,
+        angle: Math.random() * 6, v: 0, w: 90, h: 50,
+        color: `hsl(${Math.random()*360}, 60%, 50%)`
+    });
+}
+
+function spawnBlood(x, y, isPart = false, angle = 0) {
+    for(let i=0; i< (isPart ? 1 : 10); i++) {
+        particles.push({
+            x, y, 
+            vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5,
+            size: isPart ? 8 : Math.random()*4,
+            life: 1.0, color: isPart ? '#ffdbac' : '#b00',
+            isPart: isPart, ang: angle
+        });
+    }
+}
+
+// --- LOGICA ---
+window.onkeydown = e => { 
+    keys[e.code] = true; 
+    if(e.key >= 1 && e.key <= 4) player.weapon = WEAPONS[e.key];
+    if(e.code === 'KeyF') toggleVehicle();
+};
+window.onkeyup = e => keys[e.code] = false;
+
+function toggleVehicle() {
+    if(player.inCar) {
+        player.x += 80;
+        player.inCar = null;
+    } else {
+        cars.forEach(c => {
+            if(Math.hypot(player.x - c.x, player.y - c.y) < 70) player.inCar = c;
+        });
+    }
+}
+
+function update() {
+    if(player.hp <= 0) { document.getElementById('msg-box').style.display = 'block'; return; }
+
+    // Movimiento
+    if(player.inCar) {
+        let c = player.inCar;
+        if(keys['KeyW']) c.v = Math.min(c.v + 0.2, 12);
+        else if(keys['KeyS']) c.v = Math.max(c.v - 0.2, -4);
+        else c.v *= 0.98;
+        if(keys['KeyA']) c.angle -= 0.05 * (c.v/8);
+        if(keys['KeyD']) c.angle += 0.05 * (c.v/8);
+        c.x += Math.cos(c.angle) * c.v;
+        c.y += Math.sin(c.angle) * c.v;
+        player.x = c.x; player.y = c.y;
+        if(missionStep == 0) { missionStep = 1; document.getElementById('mission-text').innerText = "MISIÓN: ¡Mata a 5 enemigos con el machete!"; }
+    } else {
+        if(keys['KeyW']) player.y -= 4; if(keys['KeyS']) player.y += 4;
+        if(keys['KeyA']) player.x -= 4; if(keys['KeyD']) player.x += 4;
+    }
+
+    camera.x = player.x - canvas.width/2;
+    camera.y = player.y - canvas.height/2;
+
+    // Ataque
+    if(keys['Space'] || keys['MouseDown']) { // Asumiendo click o space
+        let now = Date.now();
+        if(now - player.lastAttack > (player.weapon.cooldown || 500)) {
+            if(player.weapon.type === "melee") {
+                checkMeleeHit();
+            } else {
+                shoot();
+            }
+            player.lastAttack = now;
+        }
+    }
+
+    // Balas y entidades
+    bullets.forEach((b, i) => {
+        b.x += Math.cos(b.ang) * b.v; b.y += Math.sin(b.ang) * b.v;
+        if(Math.abs(b.x - player.x) > 1000) bullets.splice(i, 1);
+    });
+
+    entities.forEach((en, i) => {
+        let d = Math.hypot(player.x - en.x, player.y - en.y);
+        // AI Básica
+        if(en.isEnemy && d < 400 && !player.inCar) {
+            en.angle = Math.atan2(player.y - en.y, player.x - en.x);
+            en.x += Math.cos(en.angle) * 2.5;
+            en.y += Math.sin(en.angle) * 2.5;
+            if(d < 30) player.hp -= 0.5;
+        } else {
+            // Caminar
+            if(Math.hypot(en.x - en.targetX, en.y - en.targetY) < 50) {
+                en.targetX = Math.random() * 3000; en.targetY = Math.random() * 3000;
+            }
+            en.angle = Math.atan2(en.targetY - en.y, en.targetX - en.x);
+            en.x += Math.cos(en.angle) * 1.5;
+            en.y += Math.sin(en.angle) * 1.5;
+        }
+
+        // Colisión balas
+        bullets.forEach((b, bi) => {
+            if(Math.hypot(b.x - en.x, b.y - en.y) < 25) {
+                en.hp -= b.dmg;
+                spawnBlood(en.x, en.y);
+                bullets.splice(bi, 1);
+            }
+        });
+
+        if(en.hp <= 0) {
+            if(en.isEnemy) player.cash += 100;
+            entities.splice(i, 1);
+            spawnEntity(Math.random() < 0.2);
+        }
+    });
+
+    particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.01;
+        if(p.life <= 0) particles.splice(i, 1);
+    });
+
+    // Actualizar UI
+    document.getElementById('hp-fill').style.width = player.hp + "%";
+    document.getElementById('cash').innerText = player.cash;
+    document.getElementById('weapon-info').innerText = "EQUIPADO: " + player.weapon.name;
+}
+
+function shoot() {
+    let count = player.weapon.bullets || 1;
+    for(let i=0; i<count; i++){
+        bullets.push({
+            x: player.x, y: player.y, 
+            ang: player.angle + (Math.random()-0.5)*0.2, 
+            v: player.weapon.bulletSpeed, dmg: player.weapon.damage 
+        });
+    }
+}
+
+function checkMeleeHit() {
+    entities.forEach(en => {
+        let d = Math.hypot(player.x - en.x, player.y - en.y);
+        if(d < player.weapon.range) {
+            en.hp -= player.weapon.damage;
+            spawnBlood(en.x, en.y);
+            // DESMEMBRAMIENTO
+            if(player.weapon.desmembra) {
+                if(en.parts.armL) { en.parts.armL = false; spawnBlood(en.x, en.y, true, en.angle); }
+                else if(en.parts.armR) { en.parts.armR = false; spawnBlood(en.x, en.y, true, en.angle); }
+            }
+        }
+    });
+}
+
+function draw() {
+    ctx.fillStyle = "#444"; // Color calle
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    // Dibujar Calles (Líneas divisorias)
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 5;
+    ctx.setLineDash([40, 40]);
+    for(let i=0; i<4000; i+=400) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 4000); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(4000, i); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Partículas (Sangre y partes)
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        if(p.isPart) {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.ang);
+            ctx.fillRect(0,0, 10, 5); ctx.restore();
+        } else {
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill();
+        }
+    });
+    ctx.globalAlpha = 1;
+
+    // Autos
+    cars.forEach(c => {
+        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle);
+        ctx.fillStyle = c.color; ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+        ctx.fillStyle = "#333"; ctx.fillRect(10, -c.h/2+5, 15, c.h-10); // Vidrio
+        ctx.restore();
+    });
+
+    // Personas
+    entities.forEach(en => drawPerson(en));
+    if(!player.inCar) {
+        player.angle = Math.atan2(window.event?.clientY - canvas.height/2, window.event?.clientX - canvas.width/2) || 0;
+        drawPerson(player, true);
+    }
+
+    // Balas
+    ctx.fillStyle = "yellow";
+    bullets.forEach(b => {
+        ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, 7); ctx.fill();
+    });
+
+    ctx.restore();
+}
+
+function drawPerson(p, isPlayer = false) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+
+    // Cuerpo
+    ctx.fillStyle = p.color || "#3498db";
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, 7); ctx.fill();
+
+    // Cabeza
+    ctx.fillStyle = "#ffdbac";
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, 7); ctx.fill();
+
+    // Brazos (si los tiene)
+    if(isPlayer || p.parts?.armL) { ctx.fillRect(10, -18, 10, 6); }
+    if(isPlayer || p.parts?.armR) { ctx.fillRect(10, 12, 10, 6); }
+
+    // Armas Visibles
+    if(isPlayer) {
+        ctx.fillStyle = p.weapon.color;
+        if(p.weapon.type === "melee") {
+            ctx.fillRect(12, 12, 35, 6); // Machete largo
+        } else {
+            ctx.fillRect(15, 12, 20, 5); // Pistola/Fusil
+            if(p.weapon.name === "AK-47") ctx.fillRect(10, 12, 5, 15); // Cargador
+        }
+    }
+
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// Control de mouse para disparo
+window.onmousedown = () => keys['MouseDown'] = true;
+window.onmouseup = () => keys['MouseDown'] = false;
+
+init();
+loop();
+</script>
+</body>
+</html>

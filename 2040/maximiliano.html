@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Tirador: Senda al Valhalla</title>
+    <style>
+        :root {
+            --nieve: #f0f0f0;
+            --acero: #888;
+            --sangre: #600;
+            --negro: #0a0a0a;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            background: var(--negro);
+            color: var(--nieve);
+            font-family: 'Times New Roman', serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        #contenedor {
+            position: relative;
+            width: 900px; height: 600px;
+            background: #000;
+            border: 3px solid #222;
+            overflow: hidden;
+        }
+
+        canvas { display: block; filter: sepia(0.2) contrast(1.1); }
+
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 100; text-align: center;
+        }
+
+        h1 { letter-spacing: 8px; text-transform: uppercase; margin-bottom: 5px; }
+        p { font-style: italic; color: #aaa; }
+
+        button {
+            padding: 15px 30px; background: none; border: 2px solid var(--nieve);
+            color: var(--nieve); cursor: pointer; text-transform: uppercase;
+            font-family: inherit; font-weight: bold; margin: 10px; transition: 0.3s;
+        }
+        button:hover { background: var(--nieve); color: var(--negro); box-shadow: 0 0 15px var(--nieve); }
+
+        #hud {
+            position: absolute; bottom: 25px; width: 100%;
+            padding: 0 40px; display: flex; justify-content: space-between;
+            box-sizing: border-box; pointer-events: none; z-index: 50;
+        }
+        .viking-stat { background: rgba(0,0,0,0.7); border: 1px solid #444; padding: 12px; }
+        .vida-cont { width: 200px; height: 10px; background: #222; border: 1px solid #fff; margin-top: 5px; }
+        #vida-barra { width: 100%; height: 100%; background: #fff; transition: 0.3s; }
+    </style>
+</head>
+<body>
+
+<div id="contenedor">
+    <div id="menu" class="overlay">
+        <h1>SENDA AL VALHALLA</h1>
+        <p>Los Berserkers vienen por tu honor. Elige tu acero:</p>
+        <div style="margin-top: 20px;">
+            <button onclick="iniciar('Hachas')">🪓 Hachas</button>
+            <button onclick="iniciar('Flechas')">🏹 Flechas</button>
+            <button onclick="iniciar('Cuchillos')">🔪 Cuchillos</button>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div class="viking-stat">
+            NIVEL: <span id="nivel-txt">1</span> <br>
+            <div class="vida-cont"><div id="vida-barra"></div></div>
+        </div>
+        <div class="viking-stat" style="text-align: right;">
+            BERSERKERS CAÍDOS: <span id="bajas-txt">0</span><br>
+            <small id="loc-txt">BOSQUE HELADO</small>
+        </div>
+    </div>
+
+    <div id="pantalla-final" class="overlay" style="display:none">
+        <h1 id="f-titulo"></h1>
+        <p id="f-desc"></p>
+        <div id="medalla" style="font-size: 60px; margin: 15px; display:none;">🥇</div>
+        <button onclick="location.reload()">VOLVER A LA LUCHA</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 900;
+    canvas.height = 600;
+
+    let juego = {
+        activo: false,
+        nivel: 1,
+        vida: 100,
+        bajas: 0,
+        arma: '',
+        meta: 10,
+        camaraX: 0
+    };
+
+    let enemigos = [];
+    let proyectiles = [];
+    let fragmentos = []; // Para explosiones de "astillas/sangre"
+    let teclas = {};
+
+    const configs = {
+        'Hachas': { v: 11, w: 20, h: 20, rot: true },
+        'Flechas': { v: 22, w: 2, h: 30, rot: false },
+        'Cuchillos': { v: 18, w: 5, h: 12, rot: true }
+    };
+
+    window.onkeydown = e => teclas[e.code] = true;
+    window.onkeyup = e => teclas[e.code] = false;
+
+    function iniciar(arma) {
+        juego.arma = arma;
+        juego.activo = true;
+        document.getElementById('menu').style.display = 'none';
+        spawnBerserker();
+        bucle();
+    }
+
+    function spawnBerserker() {
+        if (!juego.activo) return;
+        enemigos.push({
+            x: Math.random() * 2000 - 1000,
+            z: 1000,
+            v: 3 + (juego.nivel * 0.4),
+            osc: Math.random() * 5 // Movimiento errático
+        });
+        setTimeout(spawnBerserker, Math.max(300, 2000 - (juego.nivel * 180)));
+    }
+
+    function explotar(x, y, z) {
+        for(let i=0; i<12; i++) {
+            fragmentos.push({
+                x: x, y: y, z: z,
+                vx: (Math.random()-0.5)*25,
+                vy: (Math.random()-0.5)*25,
+                t: 1.0
+            });
+        }
+    }
+
+    function disparar() {
+        proyectiles.push({ x: 0, y: 100, z: 0, rot: 0 });
+    }
+
+    let tDisparo = 0;
+    function actualizar() {
+        if (!juego.activo) return;
+
+        if (teclas['ArrowLeft']) juego.camaraX += 8;
+        if (teclas['ArrowRight']) juego.camaraX -= 8;
+        if (teclas['Space'] && Date.now() - tDisparo > 400) {
+            disparar(); tDisparo = Date.now();
+        }
+
+        proyectiles.forEach((p, i) => {
+            p.z += configs[juego.arma].v;
+            p.rot += 0.2;
+            if (p.z > 1000) proyectiles.splice(i, 1);
+            
+            enemigos.forEach((en, ei) => {
+                let dx = (en.x + juego.camaraX) - p.x;
+                if (Math.abs(dx) < 60 && Math.abs(p.z - en.z) < 35) {
+                    explotar(en.x + juego.camaraX, 0, en.z);
+                    enemigos.splice(ei, 1);
+                    proyectiles.splice(i, 1);
+                    juego.bajas++;
+                    if (juego.bajas >= juego.meta) subirNivel();
+                }
+            });
+        });
+
+        enemigos.forEach((en, i) => {
+            en.z -= en.v;
+            en.x += Math.sin(en.z * 0.01) * en.osc; // Zigzag de berserker
+            if (en.z < 10) {
+                enemigos.splice(i, 1);
+                juego.vida -= 20;
+                document.getElementById('vida-barra').style.width = juego.vida + "%";
+                if (juego.vida <= 0) fin(false);
+            }
+        });
+
+        fragmentos.forEach((f, i) => {
+            f.x += f.vx; f.y += f.vy; f.t -= 0.04;
+            if (f.t <= 0) fragmentos.splice(i, 1);
+        });
+
+        document.getElementById('bajas-txt').innerText = juego.bajas;
+    }
+
+    function subirNivel() {
+        if (juego.nivel < 10) {
+            juego.nivel++;
+            juego.bajas = 0;
+            juego.meta += 5;
+            document.getElementById('nivel-txt').innerText = juego.nivel;
+            const locs = ["BOSQUE HELADO", "BOSQUE HELADO", "PUEBLO EN LLAMAS", "PUEBLO EN LLAMAS", "FORTALEZA DE PIEDRA", "FORTALEZA DE PIEDRA", "MUELLES NÓRDICOS", "MUELLES NÓRDICOS", "INTERIOR DE LA NAVE", "GRAN SALÓN DE ÉXODO"];
+            document.getElementById('loc-txt').innerText = locs[juego.nivel-1];
+        } else {
+            fin(true);
+        }
+    }
+
+    function dibujar() {
+        // Fondo nieve/base/nave
+        let fondo = '#0a0a0a';
+        if(juego.nivel > 4) fondo = '#1a1a1a';
+        if(juego.nivel > 8) fondo = '#000';
+        ctx.fillStyle = fondo;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Berserkers Monstruosos
+        enemigos.forEach(en => {
+            let p = 500 / en.z;
+            let x = canvas.width/2 + (en.x + juego.camaraX) * p;
+            let y = 350 + 150 * p;
+            let h = 250 * p;
+            let w = 100 * p;
+
+            if(en.z > 0) {
+                ctx.fillStyle = `rgb(${255-en.z/5},${255-en.z/5},${255-en.z/5})`;
+                // Cuerpo encorvado
+                ctx.beginPath();
+                ctx.moveTo(x - w/2, y);
+                ctx.lineTo(x - w*1.2, y - h*0.6); // Brazo con hacha
+                ctx.lineTo(x - w/4, y - h);       // Cabeza con cuernos
+                ctx.lineTo(x + w, y - h*0.5); 
+                ctx.lineTo(x + w/2, y);
+                ctx.fill();
+                // Ojos furia blanca
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x-w/5, y-h+w/4, w/8, w/8);
+                ctx.fillRect(x+w/10, y-h+w/4, w/8, w/8);
+            }
+        });
+
+        // Fragmentos de explosión
+        fragmentos.forEach(f => {
+            let p = 500 / f.z;
+            ctx.fillStyle = `rgba(255,255,255,${f.t})`;
+            ctx.fillRect(canvas.width/2 + f.x*p, 400 + f.y*p, 4*p, 4*p);
+        });
+
+        // Proyectiles (Hachas giran)
+        proyectiles.forEach(pr => {
+            let p = 500 / pr.z;
+            let x = canvas.width/2 + pr.x*p;
+            let y = 400 + pr.y*p;
+            ctx.save();
+            ctx.translate(x, y);
+            if(configs[juego.arma].rot) ctx.rotate(pr.rot);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-configs[juego.arma].w*p/2, -configs[juego.arma].h*p/2, configs[juego.arma].w*p, configs[juego.arma].h*p);
+            ctx.restore();
+        });
+
+        // Brazos Vikingos (Piel clara y protectores negros)
+        ctx.fillStyle = '#111';
+        ctx.fillRect(50, 450, 200, 250); 
+        ctx.fillRect(650, 450, 200, 250);
+        ctx.fillStyle = '#ddd'; // Piel/Túnica blanca
+        ctx.fillRect(65, 480, 170, 150);
+        ctx.fillRect(665, 480, 170, 150);
+    }
+
+    function fin(victoria) {
+        juego.activo = false;
+        const p = document.getElementById('pantalla-final');
+        p.style.display = 'flex';
+        if(victoria) {
+            document.getElementById('f-titulo').innerText = "¡HONOR AL MEJOR TIRADOR!";
+            document.getElementById('f-desc').innerText = "Has llegado a la nave y aseguras el futuro de tu clan.";
+            document.getElementById('medalla').style.display = "block";
+        } else {
+            document.getElementById('f-titulo').innerText = "BIENVENIDO AL VALHALLA";
+            document.getElementById('f-desc').innerText = "Has muerto con el arma en la mano. Los dioses te reciben.";
+        }
+    }
+
+    function bucle() {
+        actualizar();
+        dibujar();
+        if (juego.activo) requestAnimationFrame(bucle);
+    }
+</script>
+</body>
+</html>

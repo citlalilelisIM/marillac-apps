@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physlet: El Circuito de la Comunicación</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --secondary: #f39c12;
+            --accent: #e74c3c;
+            --bg: #f4f7f6;
+            --text: #2c3e50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { color: var(--primary); margin-bottom: 10px; }
+
+        #canvas-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            border: 2px solid #ddd;
+        }
+
+        .element {
+            position: absolute;
+            padding: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+            z-index: 10;
+        }
+
+        .element:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        /* Posicionamiento de Elementos */
+        #emisor { top: 150px; left: 50px; background: #a29bfe; }
+        #receptor { top: 150px; right: 50px; background: #55efc4; }
+        #mensaje { top: 100px; left: 325px; background: #ffeaa7; width: 120px; }
+        #canal { top: 220px; left: 325px; background: #81ecec; width: 120px; }
+        #codigo { top: 300px; left: 150px; background: #fab1a0; }
+        #referente { top: 20px; left: 325px; background: #dfe6e9; border: 1px dashed #636e72; }
+
+        /* Animación de Flechas */
+        .arrow {
+            position: absolute;
+            height: 4px;
+            background: var(--primary);
+            z-index: 1;
+        }
+
+        .arrow::after {
+            content: '';
+            position: absolute;
+            right: -10px;
+            top: -6px;
+            border: 8px solid transparent;
+            border-left: 12px solid var(--primary);
+        }
+
+        .flow-line {
+            position: absolute;
+            top: 185px;
+            left: 150px;
+            width: 500px;
+            height: 2px;
+            background: #eee;
+        }
+
+        .particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: var(--secondary);
+            border-radius: 50%;
+            top: -4px;
+            left: 0;
+            animation: moveRight 3s linear infinite;
+        }
+
+        @keyframes moveRight {
+            0% { left: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+
+        /* Panel de Información */
+        #info-panel {
+            margin-top: 20px;
+            width: 800px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border-left: 5px solid var(--primary);
+            min-height: 80px;
+        }
+
+        /* Área de Usuario */
+        #user-input-section {
+            margin-top: 20px;
+            width: 800px;
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border-radius: 5px;
+            border: 2px solid #ddd;
+            outline: none;
+        }
+
+        input[type="text"]:focus { border-color: var(--primary); }
+
+        .highlight {
+            outline: 4px solid var(--secondary) !important;
+            box-shadow: 0 0 20px var(--secondary);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Circuito de la Comunicación</h1>
+    <p>Haz clic en los elementos para aprender o escribe un mensaje abajo.</p>
+
+    <div id="canvas-container">
+        <div id="referente" class="element" onclick="showInfo('referente')">REFERENTE</div>
+        
+        <div class="flow-line">
+            <div class="particle"></div>
+        </div>
+
+        <div id="emisor" class="element" onclick="showInfo('emisor')">EMISOR</div>
+        
+        <div id="mensaje" class="element" onclick="showInfo('mensaje')">MENSAJE</div>
+        
+        <div id="canal" class="element" onclick="showInfo('canal')">CANAL</div>
+        
+        <div id="receptor" class="element" onclick="showInfo('receptor')">RECEPTOR</div>
+        
+        <div id="codigo" class="element" onclick="showInfo('codigo')">CÓDIGO</div>
+    </div>
+
+    <div id="info-panel">
+        <h3 id="info-title">¡Bienvenido!</h3>
+        <p id="info-text">Selecciona cualquier elemento del diagrama para ver su definición y ejemplos.</p>
+    </div>
+
+    <div id="user-input-section">
+        <input type="text" id="user-msg" placeholder="Escribe un mensaje aquí (ej: 'Hola, ¿cómo estás?')">
+    </div>
+
+    <script>
+        const data = {
+            emisor: {
+                titulo: "Emisor",
+                def: "Es quien produce y envía el mensaje.",
+                ej: "Un locutor de radio o tú al escribir un mensaje de WhatsApp."
+            },
+            receptor: {
+                titulo: "Receptor",
+                def: "Es quien recibe e interpreta el mensaje.",
+                ej: "El amigo que lee tu mensaje o el público que escucha una charla."
+            },
+            mensaje: {
+                titulo: "Mensaje",
+                def: "Es la información o contenido que se desea transmitir.",
+                ej: "La frase 'Mañana no hay clases' o un semáforo en rojo."
+            },
+            canal: {
+                titulo: "Canal",
+                def: "Es el medio físico por el cual viaja el mensaje.",
+                ej: "El aire (voz), el cable de fibra óptica (internet) o el papel (carta)."
+            },
+            codigo: {
+                titulo: "Código",
+                def: "Sistema de signos y reglas que emisor y receptor comparten.",
+                ej: "El idioma español, el lenguaje de señas o el código Morse."
+            },
+            referente: {
+                titulo: "Referente",
+                def: "Es el objeto, idea o realidad externa a la que se refiere el mensaje.",
+                ej: "Si el mensaje es 'El perro tiene hambre', el referente es el animal real."
+            }
+        };
+
+        function showInfo(key) {
+            const item = data[key];
+            document.getElementById('info-title').innerText = item.titulo;
+            document.getElementById('info-text').innerHTML = `<strong>Definición:</strong> ${item.def}<br><strong>Ejemplo:</strong> ${item.ej}`;
+            
+            // Efecto visual de selección
+            document.querySelectorAll('.element').forEach(el => el.classList.remove('highlight'));
+            document.getElementById(key).classList.add('highlight');
+        }
+
+        const inputField = document.getElementById('user-msg');
+        const mensajeBox = document.getElementById('mensaje');
+
+        inputField.addEventListener('input', (e) => {
+            if (e.target.value.length > 0) {
+                mensajeBox.innerText = e.target.value;
+                mensajeBox.classList.add('highlight');
+                document.getElementById('info-title').innerText = "Personalizando el Mensaje";
+                document.getElementById('info-text').innerText = "¡Estás creando el contenido! El mensaje viaja del Emisor al Receptor a través del Canal.";
+            } else {
+                mensajeBox.innerText = "MENSAJE";
+                mensajeBox.classList.remove('highlight');
+            }
+        });
+    </script>
+</body>
+</html>

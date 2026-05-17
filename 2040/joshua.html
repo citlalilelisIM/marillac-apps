@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Woody: Triple Explosión Total</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            color: #f1c40f;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #795548;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.3);
+        }
+        canvas { display: block; background: #000; }
+        .ui-layer {
+            position: absolute;
+            top: 0; width: 100%;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            box-sizing: border-box;
+            font-size: 18px;
+            text-shadow: 2px 2px #000;
+            pointer-events: none;
+        }
+        #ammo-bar {
+            color: #fff;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid #00ffff;
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        button {
+            background: #795548;
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            font-size: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+        button:hover { background: #a1887f; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui-layer">
+        <div>PUNTOS: <span id="score">0</span> | VIDAS: <span id="lives">3</span></div>
+        <div id="ammo-bar">TRIPLE BOMBA: <span id="ammo-count">0</span>/10</div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="overlay">
+        <h2 style="color: #e74c3c; font-size: 35px;">¡ADIÓS, VAQUERO!</h2>
+        <p id="final-score" style="color:white; font-size: 20px;">Puntaje: 0</p>
+        <button onclick="resetGame()">VOLVER A EMPEZAR</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const ammoEl = document.getElementById('ammo-count');
+    const overlay = document.getElementById('overlay');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let score = 0, lives = 3, isGameOver = false, shotCounter = 0;
+    let enemies = [], bullets = [], particles = [], keys = {};
+
+    const player = { x: 400, y: 500, w: 50, h: 70, speed: 8 };
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Space' && !isGameOver) shoot();
+    });
+
+    function shoot() {
+        shotCounter++;
+        
+        if (shotCounter >= 10) {
+            // DISPARO TRIPLE (BOMBAS)
+            const angles = [-0.5, 0, 0.5]; // Izquierda, Centro, Derecha
+            angles.forEach(angle => {
+                bullets.push({ 
+                    x: player.x + player.w/2 - 10, 
+                    y: player.y, 
+                    w: 20, h: 30, 
+                    speedY: -8,
+                    speedX: angle * 5, // Define la trayectoria diagonal
+                    isSuper: true,
+                    color: '#00ffff'
+                });
+            });
+            shotCounter = 0;
+        } else {
+            // DISPARO NORMAL
+            bullets.push({ 
+                x: player.x + player.w/2 - 4, 
+                y: player.y, 
+                w: 8, h: 20, 
+                speedY: -12,
+                speedX: 0,
+                isSuper: false,
+                color: '#e74c3c'
+            });
+        }
+        
+        ammoEl.innerText = shotCounter;
+        ammoEl.style.color = (shotCounter === 9) ? "#00ffff" : "#fff";
+    }
+
+    function createExplosion(x, y, color, power = 1) {
+        const count = 15 * power;
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * (12 * power),
+                vy: (Math.random() - 0.5) * (12 * power),
+                life: 1.0,
+                color: color,
+                size: Math.random() * 5 * power
+            });
+        }
+    }
+
+    function drawWoody(x, y, w, h) {
+        ctx.fillStyle = "#5d4037"; // Sombrero
+        ctx.beginPath(); ctx.ellipse(x + w/2, y + 20, 30, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(x + w/2 - 12, y, 24, 20);
+        ctx.fillStyle = "#ffdbac"; // Cara
+        ctx.beginPath(); ctx.ellipse(x + w/2, y + 35, 18, 22, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#f1c40f"; // Camisa
+        ctx.fillRect(x + 10, y + 40, w - 20, h - 40);
+        ctx.fillStyle = "white"; // Ojos
+        ctx.beginPath(); ctx.arc(x + w/2 - 7, y + 32, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + w/2 + 7, y + 32, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "black";
+        ctx.beginPath(); ctx.arc(x + w/2 - 6, y + 32, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + w/2 + 8, y + 32, 2, 0, Math.PI*2); ctx.fill();
+    }
+
+    function spawnEnemy() {
+        if (isGameOver) return;
+        enemies.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -40, w: 40, h: 40,
+            speed: 3 + (score/2500),
+        });
+        setTimeout(spawnEnemy, Math.max(250, 900 - (score/40)));
+    }
+
+    function update() {
+        if (isGameOver) return;
+
+        if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > 0) player.x -= player.speed;
+        if ((keys['ArrowRight'] || keys['KeyD']) && player.x < canvas.width - player.w) player.x += player.speed;
+        if ((keys['ArrowUp'] || keys['KeyW']) && player.y > 0) player.y -= player.speed;
+        if ((keys['ArrowDown'] || keys['KeyS']) && player.y < canvas.height - player.h) player.y += player.speed;
+
+        bullets.forEach((b, bi) => {
+            b.y += b.speedY;
+            b.x += b.speedX; // Movimiento lateral para las diagonales
+            if (b.y < -50 || b.x < -50 || b.x > canvas.width + 50) bullets.splice(bi, 1);
+        });
+
+        particles.forEach((p, pi) => {
+            p.x += p.vx; p.y += p.vy; p.life -= 0.025;
+            if (p.life <= 0) particles.splice(pi, 1);
+        });
+
+        enemies.forEach((en, ei) => {
+            en.y += en.speed;
+            
+            if (rectIntersect(player.x, player.y, player.w, player.h, en.x, en.y, en.w, en.h)) {
+                createExplosion(player.x + player.w/2, player.y + player.h/2, 'red', 2);
+                enemies.splice(ei, 1);
+                lives--; livesEl.innerText = lives;
+                if (lives <= 0) endGame();
+            }
+
+            bullets.forEach((b, bi) => {
+                if (rectIntersect(en.x, en.y, en.w, en.h, b.x, b.y, b.w, b.h)) {
+                    if (b.isSuper) {
+                        createExplosion(b.x, b.y, '#00ffff', 6);
+                        // Matar en cadena (radio de impacto)
+                        enemies.forEach((enNear, enIdx) => {
+                            let dist = Math.hypot(enNear.x - b.x, enNear.y - b.y);
+                            if (dist < 180) {
+                                setTimeout(() => createExplosion(enNear.x, enNear.y, '#f1c40f', 0.5), 50);
+                                enemies.splice(enIdx, 1);
+                                score += 50;
+                            }
+                        });
+                    } else {
+                        createExplosion(en.x, en.y, '#e67e22', 1);
+                        enemies.splice(ei, 1);
+                        score += 100;
+                    }
+                    bullets.splice(bi, 1);
+                    scoreEl.innerText = score;
+                }
+            });
+            if (en.y > canvas.height) enemies.splice(ei, 1);
+        });
+    }
+
+    function draw() {
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI*2); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        drawWoody(player.x, player.y, player.w, player.h);
+
+        bullets.forEach(b => {
+            ctx.shadowBlur = b.isSuper ? 25 : 10;
+            ctx.shadowColor = b.color;
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+        });
+        ctx.shadowBlur = 0;
+
+        enemies.forEach(en => {
+            ctx.fillStyle = "#2ecc71"; ctx.fillRect(en.x, en.y, en.w, en.h);
+            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(en.x+20, en.y+15, 8, 0, Math.PI*2); ctx.fill();
+        });
+    }
+
+    function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+        return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+    }
+
+    function endGame() { isGameOver = true; overlay.style.display = 'flex'; document.getElementById('final-score').innerText = `Puntaje Final: ${score}`; }
+
+    function resetGame() {
+        score = 0; lives = 3; shotCounter = 0; enemies = []; bullets = []; particles = [];
+        isGameOver = false; scoreEl.innerText = score; livesEl.innerText = lives;
+        ammoEl.innerText = "0"; overlay.style.display = 'none';
+    }
+
+    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+    spawnEnemy(); gameLoop();
+</script>
+</body>
+</html>

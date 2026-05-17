@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plantita - Cuida tu hidratación</title>
+    <style>
+        :root {
+            --sky-blue: #e0f7fa;
+            --grass-green: #81c784;
+            --pot-color: #d87d4a;
+            --leaf-green: #4caf50;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--sky-blue);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            background: white;
+            padding: 30px;
+            border-radius: 30px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+            position: relative;
+        }
+
+        h1 { color: #2e7d32; margin-top: 0; }
+
+        /* --- ESCENA DE LA PLANTITA --- */
+        .garden-plot {
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .pot {
+            width: 80px;
+            height: 60px;
+            background-color: var(--pot-color);
+            clip-path: polygon(0 0, 100% 0, 85% 100%, 15% 100%);
+            z-index: 2;
+        }
+
+        .stem {
+            width: 8px;
+            background-color: var(--leaf-green);
+            transition: height 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            height: 0px; /* Crece con JS */
+            position: relative;
+            bottom: -5px;
+        }
+
+        .flower {
+            width: 40px;
+            height: 40px;
+            background: #f48fb1;
+            border-radius: 50%;
+            position: absolute;
+            top: -35px;
+            left: -16px;
+            transform: scale(0);
+            transition: transform 0.5s ease-out 0.5s;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .leaf {
+            width: 20px;
+            height: 10px;
+            background: var(--leaf-green);
+            border-radius: 0 15px 0 15px;
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        /* --- UI CONTROLES --- */
+        .stats {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #444;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #eee;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        #fill {
+            height: 100%;
+            width: 0%;
+            background: #4fc3f7;
+            transition: width 0.5s;
+        }
+
+        .btn-water {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+            transition: transform 0.2s;
+        }
+
+        .btn-water:active { transform: scale(0.95); }
+
+        .btn-reset {
+            margin-top: 15px;
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h1>Plantita 🌿</h1>
+        
+        <div class="garden-plot">
+            <div class="stem" id="stem">
+                <div class="flower" id="flower"></div>
+                <div class="leaf" style="top: 20px; left: 8px; opacity: 0;" id="leaf1"></div>
+                <div class="leaf" style="top: 40px; right: 8px; transform: scaleX(-1); opacity: 0;" id="leaf2"></div>
+            </div>
+            <div class="pot"></div>
+        </div>
+
+        <div class="stats">
+            <span id="current">0</span> / 2000 ml
+        </div>
+
+        <div class="progress-bar">
+            <div id="fill"></div>
+        </div>
+
+        <button class="btn-water" onclick="drinkWater()">Beber 250ml 💧</button>
+        <br>
+        <button class="btn-reset" onclick="resetApp()">Reiniciar planta</button>
+    </div>
+
+    <script>
+        let waterDrank = 0;
+        const goal = 2000;
+
+        // Elementos
+        const stem = document.getElementById('stem');
+        const flower = document.getElementById('flower');
+        const leaf1 = document.getElementById('leaf1');
+        const leaf2 = document.getElementById('leaf2');
+        const fill = document.getElementById('fill');
+        const currentText = document.getElementById('current');
+
+        // Cargar datos guardados
+        window.onload = () => {
+            const saved = localStorage.getItem('plantita_agua');
+            if (saved) {
+                waterDrank = parseInt(saved);
+                updatePlant();
+            }
+        };
+
+        function drinkWater() {
+            if (waterDrank < goal) {
+                waterDrank += 250;
+                localStorage.setItem('plantita_agua', waterDrank);
+                updatePlant();
+            }
+        }
+
+        function updatePlant() {
+            const percent = (waterDrank / goal) * 100;
+            
+            // Actualizar UI texto y barra
+            currentText.innerText = waterDrank;
+            fill.style.width = Math.min(percent, 100) + "%";
+
+            // Crecer tallo (máximo 120px)
+            const stemHeight = (Math.min(percent, 100) / 100) * 120;
+            stem.style.height = stemHeight + "px";
+
+            // Mostrar hojas progresivamente
+            if (percent >= 30) leaf1.style.opacity = 1;
+            if (percent >= 60) leaf2.style.opacity = 1;
+
+            // Mostrar flor al final
+            if (percent >= 100) {
+                flower.style.transform = "scale(1)";
+            } else {
+                flower.style.transform = "scale(0)";
+            }
+        }
+
+        function resetApp() {
+            if(confirm("¿Seguro que quieres reiniciar? Tu plantita volverá a ser una semilla.")) {
+                waterDrank = 0;
+                localStorage.setItem('plantita_agua', waterDrank);
+                leaf1.style.opacity = 0;
+                leaf2.style.opacity = 0;
+                updatePlant();
+            }
+        }
+    </script>
+</body>
+</html>

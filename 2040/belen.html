@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Care Bear Neon Strike</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #ff8dfb; /* Rosa neón */
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        #game-container {
+            position: relative;
+            border: 3px solid #ff8dfb;
+            box-shadow: 0 0 25px #ff8dfb;
+        }
+
+        canvas {
+            display: block;
+            background: #050005; /* Fondo casi negro pero con tinte púrpura */
+        }
+
+        .ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            font-size: 20px;
+            text-shadow: 0 0 8px #ff8dfb;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 30px #ff0000;
+        }
+
+        button {
+            background: transparent;
+            border: 2px solid #ff8dfb;
+            color: #ff8dfb;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 18px;
+            margin-top: 15px;
+        }
+
+        button:hover {
+            background: #ff8dfb;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="ui">AMOR: <span id="score">0</span> | VIDAS: <span id="lives">3</span></div>
+        
+        <div id="game-over">
+            <h1 style="color: #ff0000;">¡FIN DEL AMOR!</h1>
+            <p>Puntos de Cariño: <span id="final-score">0</span></p>
+            <button onclick="resetGame()">REINTENTAR</button>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const gameOverEl = document.getElementById('game-over');
+        const finalScoreEl = document.getElementById('final-score');
+
+        canvas.width = 600;
+        canvas.height = 700;
+
+        // Estado del juego
+        let score = 0;
+        let lives = 3;
+        let gameActive = true;
+        let keys = {};
+
+        // Clases de objetos
+        class CareBearPlayer {
+            constructor() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height - 80;
+                this.size = 40; // Tamaño aproximado
+                this.speed = 6;
+                this.color = "#ff8dfb"; // Rosa para Alegrosita
+            }
+
+            // DIBUJAR AL OSITO CARIÑOSITO CON CÓDIGO
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Efecto de brillo neón
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+
+                // --- Cuerpo principal ---
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, 20, 0, Math.PI * 2); // Cabeza/Cuerpo central
+                ctx.fill();
+
+                // --- Orejas ---
+                ctx.beginPath();
+                ctx.arc(-15, -15, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(15, -15, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // --- Hocico ---
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(0, 5, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // --- Nariz y Ojos ---
+                ctx.fillStyle = "#000";
+                ctx.beginPath(); ctx.arc(0, 3, 2, 0, Math.PI * 2); ctx.fill(); // Nariz
+                ctx.beginPath(); ctx.arc(-7, -3, 2, 0, Math.PI * 2); ctx.fill(); // Ojo izq
+                ctx.beginPath(); ctx.arc(7, -3, 2, 0, Math.PI * 2); ctx.fill(); // Ojo der
+
+                // --- EL EMBLEMA DE LA BARRIGA (CORAZÓN) ---
+                ctx.fillStyle = "#ff0000"; // Rojo brillante
+                ctx.shadowColor = "#ff0000"; // Brillo rojo separado
+                ctx.beginPath();
+                ctx.moveTo(0, 15);
+                ctx.bezierCurveTo(-5, 10, -10, 15, 0, 25);
+                ctx.bezierCurveTo(10, 15, 5, 10, 0, 15);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+
+            update() {
+                if (keys['ArrowLeft'] || keys['a']) this.x -= this.speed;
+                if (keys['ArrowRight'] || keys['d']) this.x += this.speed;
+                if (keys['ArrowUp'] || keys['w']) this.y -= this.speed;
+                if (keys['ArrowDown'] || keys['s']) this.y += this.speed;
+
+                // Límites de pantalla (con margen para el oso)
+                this.x = Math.max(20, Math.min(canvas.width - 20, this.x));
+                this.y = Math.max(20, Math.min(canvas.height - 20, this.y));
+                this.draw();
+            }
+        }
+
+        class StarBullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.speed = 8;
+                this.radius = 4;
+                this.color = "#ffff00"; // Amarillo neón para estrellas
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                // Dibujar una estrella simple de 5 puntas
+                for (let i = 0; i < 5; i++) {
+                    ctx.lineTo(this.x + Math.cos((18+i*72)/180*Math.PI)*this.radius, 
+                                this.y - Math.sin((18+i*72)/180*Math.PI)*this.radius);
+                    ctx.lineTo(this.x + Math.cos((54+i*72)/180*Math.PI)*(this.radius/2), 
+                                this.y - Math.sin((54+i*72)/180*Math.PI)*(this.radius/2));
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+            update() {
+                this.y -= this.speed;
+                this.draw();
+            }
+        }
+
+        class DesamorEnemy {
+            constructor() {
+                this.width = 30;
+                this.height = 30;
+                this.x = Math.random() * (canvas.width - this.width);
+                this.y = -this.height;
+                this.speed = 1.5 + Math.random() * 2;
+                // Color aleatorio para enemigos
+                this.color = `hsl(${Math.random() * 360}, 70%, 50%)`; 
+            }
+            draw() {
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                // Enemigos cuadrados/angulares, contraste con el oso redondo
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+            }
+            update() {
+                this.y += this.speed;
+                this.draw();
+            }
+        }
+
+        // Instancias y Arrays
+        let player = new CareBearPlayer();
+        let bullets = [];
+        let enemies = [];
+        let enemySpawnTimer = 0;
+
+        // Controles
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space' && gameActive) {
+                // Dispara desde el centro del oso
+                bullets.push(new StarBullet(player.x, player.y - 20));
+            }
+        });
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            bullets = [];
+            enemies = [];
+            gameActive = true;
+            player = new CareBearPlayer();
+            scoreEl.innerText = score;
+            livesEl.innerText = lives;
+            gameOverEl.style.display = 'none';
+            animate();
+        }
+
+        function animate() {
+            if (!gameActive) return;
+
+            // Limpiar fondo con efecto de estela sutil
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(10, 0, 10, 0.2)'; // Tinte púrpura muy oscuro
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            player.update();
+
+            // Disparos (Estrellas de la suerte)
+            bullets.forEach((bullet, index) => {
+                bullet.update();
+                if (bullet.y < 0) bullets.splice(index, 1);
+            });
+
+            // Enemigos (Cubos de desamor)
+            enemySpawnTimer++;
+            if (enemySpawnTimer > 50) { // Un poco más rápido que antes
+                enemies.push(new DesamorEnemy());
+                enemySpawnTimer = 0;
+            }
+
+            enemies.forEach((enemy, eIndex) => {
+                enemy.update();
+
+                // Colisión con el Osito (ajustada para formas redondas)
+                let dx = player.x - (enemy.x + enemy.width/2);
+                let dy = player.y - (enemy.y + enemy.height/2);
+                let distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance < 25) { // Radio de colisión aproximado
+                    enemies.splice(eIndex, 1);
+                    lives--;
+                    livesEl.innerText = lives;
+                    if (lives <= 0) {
+                        gameActive = false;
+                        finalScoreEl.innerText = score;
+                        gameOverEl.style.display = 'block';
+                    }
+                }
+
+                // Colisión con Estrellas
+                bullets.forEach((bullet, bIndex) => {
+                    if (
+                        bullet.x > enemy.x && bullet.x < enemy.x + enemy.width &&
+                        bullet.y > enemy.y && bullet.y < enemy.y + enemy.height
+                    ) {
+                        enemies.splice(eIndex, 1);
+                        bullets.splice(bIndex, 1);
+                        score += 50; // ¡Más puntos por compartir amor!
+                        scoreEl.innerText = score;
+                    }
+                });
+
+                if (enemy.y > canvas.height) enemies.splice(eIndex, 1);
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Iniciar
+        animate();
+    </script>
+</body>
+</html>

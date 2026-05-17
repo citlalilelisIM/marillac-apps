@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Carrera de Cocina Cariñosita</title>
+    <style>
+        :root {
+            --p1-color: #ff80df;
+            --p2-color: #80dfff;
+            --bg-color: #fff0f5;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            font-family: 'Comic Sans MS', cursive;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #game-info {
+            text-align: center;
+            padding: 10px;
+            background: white;
+            width: 100%;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        #game-canvas {
+            background: #ffffff;
+            border: 5px solid #ffb3e6;
+            border-radius: 15px;
+            margin-top: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .controls-hint {
+            display: flex;
+            justify-content: space-around;
+            width: 800px;
+            margin-top: 10px;
+        }
+
+        .p1-hint { color: var(--p1-color); font-weight: bold; }
+        .p2-hint { color: var(--p2-color); font-weight: bold; }
+
+        #victory-screen {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            border: 5px solid gold;
+            text-align: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-info">
+    <h1>🐻 Carrera de Cocina Cariñosita 🧁</h1>
+    <p>¡Pasa por las estaciones en orden: 1.Ingredientes -> 2.Estufa -> 3.Plato!</p>
+</div>
+
+<canvas id="game-canvas" width="800" height="500"></canvas>
+
+<div class="controls-hint">
+    <div class="p1-hint">Jugador 1: W,A,S,D</div>
+    <div class="p2-hint">Jugador 2: Flechas</div>
+</div>
+
+<div id="victory-screen">
+    <h2 id="winner-text"></h2>
+    <button onclick="location.reload()">Jugar de nuevo</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const victoryScreen = document.getElementById('victory-screen');
+    const winnerText = document.getElementById('winner-text');
+
+    const stations = [
+        { id: 1, name: "Ingredientes", x: 100, y: 100, color: "#ffd700" },
+        { id: 2, name: "Estufa", x: 400, y: 100, color: "#ff4500" },
+        { id: 3, name: "Emplatado", x: 700, y: 100, color: "#32cd32" }
+    ];
+
+    const players = {
+        p1: {
+            x: 100, y: 400, size: 40, color: "#ff80df", 
+            score: 0, nextStation: 1, name: "Osito Rosa"
+        },
+        p2: {
+            x: 700, y: 400, size: 40, color: "#80dfff", 
+            score: 0, nextStation: 1, name: "Osito Azul"
+        }
+    };
+
+    const keys = {};
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function drawBear(p) {
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = p.color;
+        
+        // Cuerpo/Cabeza
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size/2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Orejas
+        ctx.beginPath();
+        ctx.arc(p.x - 15, p.y - 15, 8, 0, Math.PI * 2);
+        ctx.arc(p.x + 15, p.y - 15, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Insignia de la barriga (Blanca)
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y + 5, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Progreso
+        ctx.fillStyle = "black";
+        ctx.font = "bold 12px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Paso: " + (p.nextStation - 1) + "/3", p.x, p.y - 30);
+        
+        ctx.restore();
+    }
+
+    function update() {
+        if (victoryScreen.style.display === 'block') return;
+
+        // Movimiento P1 (WASD)
+        if (keys['KeyW'] && players.p1.y > 0) players.p1.y -= 5;
+        if (keys['KeyS'] && players.p1.y < canvas.height) players.p1.y += 5;
+        if (keys['KeyA'] && players.p1.x > 0) players.p1.x -= 5;
+        if (keys['KeyD'] && players.p1.x < canvas.width) players.p1.x += 5;
+
+        // Movimiento P2 (Flechas)
+        if (keys['ArrowUp'] && players.p2.y > 0) players.p2.y -= 5;
+        if (keys['ArrowDown'] && players.p2.y < canvas.height) players.p2.y += 5;
+        if (keys['ArrowLeft'] && players.p2.x > 0) players.p2.x -= 5;
+        if (keys['ArrowRight'] && players.p2.x < canvas.width) players.p2.x += 5;
+
+        // Verificar Estaciones
+        [players.p1, players.p2].forEach(p => {
+            stations.forEach(s => {
+                const dist = Math.hypot(p.x - s.x, p.y - s.y);
+                if (dist < 40 && p.nextStation === s.id) {
+                    p.nextStation++;
+                    if (p.nextStation > 3) {
+                        endGame(p.name);
+                    }
+                }
+            });
+        });
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar Estaciones
+        stations.forEach(s => {
+            ctx.fillStyle = s.color;
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, 40, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            ctx.strokeStyle = s.color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = "#333";
+            ctx.font = "14px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(s.id + ". " + s.name, s.x, s.y + 60);
+        });
+
+        drawBear(players.p1);
+        drawBear(players.p2);
+
+        requestAnimationFrame(() => {
+            update();
+            draw();
+        });
+    }
+
+    function endGame(winner) {
+        victoryScreen.style.display = 'block';
+        winnerText.innerText = "✨ ¡" + winner + " cocinó más rápido! ✨";
+    }
+
+    draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fruit Catcher Pro - Vibe Coding</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --player-color: #00d2ff;
+            --text-color: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background: linear-gradient(to bottom, #16213e, #0f3460);
+            border: 4px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        #player {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            width: 60px;
+            height: 20px;
+            background-color: var(--player-color);
+            border-radius: 10px;
+            transform: translateX(-50%);
+            box-shadow: 0 0 15px var(--player-color);
+        }
+
+        .fruit {
+            position: absolute;
+            font-size: 30px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 15px;
+            width: 80%;
+        }
+
+        button {
+            background: var(--player-color);
+            border: none;
+            padding: 10px 20px;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui">Puntos: <span id="score">0</span></div>
+        <div id="player"></div>
+        
+        <div id="game-over">
+            <h1>¡FIN DEL JUEGO!</h1>
+            <p>Tu puntuación final: <span id="final-score">0</span></p>
+            <button onclick="restartGame()">Jugar de nuevo</button>
+        </div>
+    </div>
+
+    <p>Usa las <b>flechas izquierda/derecha</b> o el <b>mouse</b></p>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('score');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score');
+
+        let score = 0;
+        let gameActive = true;
+        let playerX = 200;
+        const fruits = ['🍎', '🍊', '🍇', '🍌', '🍓', '🍒'];
+
+        // Movimiento con el mouse/touch
+        container.addEventListener('mousemove', (e) => {
+            if (!gameActive) return;
+            let rect = container.getBoundingClientRect();
+            playerX = e.clientX - rect.left;
+            updatePlayerPosition();
+        });
+
+        // Movimiento con teclado
+        window.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+            if (e.key === 'ArrowLeft') playerX -= 30;
+            if (e.key === 'ArrowRight') playerX += 30;
+            updatePlayerPosition();
+        });
+
+        function updatePlayerPosition() {
+            if (playerX < 30) playerX = 30;
+            if (playerX > 370) playerX = 370;
+            player.style.left = playerX + 'px';
+        }
+
+        function createFruit() {
+            if (!gameActive) return;
+
+            const fruit = document.createElement('div');
+            fruit.className = 'fruit';
+            fruit.innerText = fruits[Math.floor(Math.random() * fruits.length)];
+            fruit.style.left = Math.random() * (370 - 30) + 30 + 'px';
+            fruit.style.top = '-50px';
+            container.appendChild(fruit);
+
+            let posY = -50;
+            let speed = 3 + (score / 10); // Aumenta dificultad
+
+            function fall() {
+                if (!gameActive) {
+                    fruit.remove();
+                    return;
+                }
+
+                posY += speed;
+                fruit.style.top = posY + 'px';
+
+                // Detectar colisión
+                let playerRect = player.getBoundingClientRect();
+                let fruitRect = fruit.getBoundingClientRect();
+
+                if (
+                    fruitRect.bottom >= playerRect.top &&
+                    fruitRect.right >= playerRect.left &&
+                    fruitRect.left <= playerRect.right &&
+                    fruitRect.top <= playerRect.bottom
+                ) {
+                    score++;
+                    scoreElement.innerText = score;
+                    fruit.remove();
+                    return;
+                }
+
+                // Si cae al suelo
+                if (posY > 600) {
+                    endGame();
+                    fruit.remove();
+                    return;
+                }
+
+                requestAnimationFrame(fall);
+            }
+            fall();
+        }
+
+        function endGame() {
+            gameActive = false;
+            gameOverScreen.style.display = 'block';
+            finalScoreElement.innerText = score;
+        }
+
+        function restartGame() {
+            score = 0;
+            scoreElement.innerText = score;
+            gameActive = true;
+            gameOverScreen.style.display = 'none';
+        }
+
+        // Generar frutas cada cierto tiempo
+        setInterval(() => {
+            if (gameActive) createFruit();
+        }, 1000);
+
+    </script>
+</body>
+</html>

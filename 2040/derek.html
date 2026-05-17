@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DASTOR | Global Security Marketplace</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-trust: #0052ff; /* Azul confianza */
+            --bg-light: #ffffff;
+            --bg-soft: #f4f7fa;
+            --text-main: #1a1f36;
+            --border-color: #e3e8ee;
+            --success: #00d639;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+        
+        body { background-color: var(--bg-soft); color: var(--text-main); }
+
+        /* --- Header --- */
+        header {
+            background: var(--bg-light);
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0; z-index: 1000;
+        }
+
+        .logo { font-size: 1.5rem; font-weight: 800; color: var(--primary-trust); letter-spacing: -0.5px; }
+
+        .nav-tools { display: flex; gap: 15px; align-items: center; }
+
+        /* --- Buttons --- */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary { background: var(--primary-trust); color: white; }
+        .btn-primary:hover { background: #0044d6; }
+        .btn-outline { background: white; border: 1px solid var(--border-color); color: var(--text-main); }
+        .btn-outline:hover { background: var(--bg-soft); }
+
+        /* --- Login Section --- */
+        #login-area {
+            max-width: 400px;
+            margin: 100px auto;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .input-group { text-align: left; margin-bottom: 20px; }
+        .input-group label { display: block; margin-bottom: 8px; font-size: 0.85rem; color: #4f566b; }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; outline: none; transition: border 0.2s; }
+        .input-group input:focus { border-color: var(--primary-trust); }
+
+        /* --- Marketplace Area (Hidden until login) --- */
+        #main-marketplace { display: none; padding: 2rem 5%; }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 30px; margin-top: 30px; }
+
+        .card { 
+            background: white; border-radius: 12px; overflow: hidden; 
+            border: 1px solid var(--border-color); transition: 0.3s;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+        .card img { width: 100%; height: 200px; object-fit: cover; border-bottom: 1px solid var(--border-color); }
+        .card-body { padding: 20px; }
+        
+        .price { font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-top: 10px; }
+
+        /* --- Image Preview Area --- */
+        #preview-container {
+            width: 100%; height: 150px; border: 2px dashed var(--border-color);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            margin-bottom: 15px; position: relative; overflow: hidden;
+        }
+        #preview-container img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* --- Modals --- */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(26, 31, 54, 0.4); display: none; justify-content: center; align-items: center; z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content { background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 500px; }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo"><i class="fa-solid fa-shield-halved"></i> DASTOR</div>
+    <div class="nav-tools" id="header-tools" style="display: none;">
+        <button class="btn btn-outline" onclick="toggleModal('modalSell')"><i class="fa fa-camera"></i> Subir Producto</button>
+        <button class="btn btn-primary" onclick="toggleCart()"><i class="fa fa-cart-shopping"></i> <span id="cart-count">0</span></button>
+        <button class="btn btn-outline" onclick="logout()" title="Cerrar Sesión"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+</header>
+
+<div id="login-area">
+    <h2 style="margin-bottom: 10px;">Bienvenido a DASTOR</h2>
+    <p style="color: #697386; margin-bottom: 30px; font-size: 0.9rem;">Inicia sesión de forma segura para comprar y vender globalmente.</p>
+    
+    <div class="input-group">
+        <label>Correo Electrónico</label>
+        <input type="email" id="loginEmail" placeholder="tu@ejemplo.com">
+    </div>
+    <div class="input-group">
+        <label>Contraseña</label>
+        <input type="password" id="loginPass" placeholder="••••••••">
+    </div>
+    
+    <button class="btn btn-primary" style="width: 100%; padding: 14px;" onclick="handleLogin()">Acceso Seguro</button>
+    
+    <p style="font-size: 0.8rem; margin-top: 20px; color: #697386;">
+        <i class="fa-solid fa-lock"></i> Conexión cifrada de punto a punto
+    </p>
+</div>
+
+<div id="main-marketplace">
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>Mercado de Confianza</h2>
+            <div id="admin-info" style="font-size: 0.9rem; color: var(--primary-trust);">
+                Ganancias DASTOR: <b id="earnings-val">$0.00</b>
+            </div>
+        </div>
+        <div class="grid" id="product-grid"></div>
+    </div>
+</div>
+
+<div class="modal" id="modalSell">
+    <div class="modal-content">
+        <h3 style="margin-bottom: 20px;">Publicar Producto Global</h3>
+        <div class="input-group">
+            <label>Foto del Producto</label>
+            <div id="preview-container">
+                <span id="preview-text">No hay imagen seleccionada</span>
+                <img id="img-preview" style="display:none;">
+            </div>
+            <input type="file" id="fileInput" accept="image/*" onchange="previewImage(event)">
+        </div>
+        <div class="input-group">
+            <label>Nombre</label>
+            <input type="text" id="pName" placeholder="Ej: Reloj Suizo Original">
+        </div>
+        <div class="input-group">
+            <label>Precio (USD)</label>
+            <input type="number" id="pPrice" placeholder="0.00">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-outline" style="flex: 1;" onclick="toggleModal('modalSell')">Cancelar</button>
+            <button class="btn btn-primary" style="flex: 1;" onclick="uploadProduct()">Publicar Ahora</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let products = [
+        { id: 1, name: "Silla de Diseño Nórdico", price: 120, img: "https://images.unsplash.com/photo-1592078615290-033ee584e267?w=400", seller: "DesignStudio" },
+        { id: 2, name: "Auriculares Hi-Fi Pro", price: 299, img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400", seller: "AudioMaster" }
+    ];
+    let cart = [];
+    let adminEarnings = 0;
+    let selectedImageBase64 = "";
+
+    // Simulación de Login
+    function handleLogin() {
+        const email = document.getElementById('loginEmail').value;
+        if(email.includes("@")) {
+            document.getElementById('login-area').style.display = 'none';
+            document.getElementById('main-marketplace').style.display = 'block';
+            document.getElementById('header-tools').style.display = 'flex';
+            renderProducts();
+        } else {
+            alert("Por favor, ingresa un correo válido.");
+        }
+    }
+
+    function logout() {
+        location.reload();
+    }
+
+    // Previsualizar Imagen
+    function previewImage(event) {
+        const reader = new FileReader();
+        reader.onload = function() {
+            const output = document.getElementById('img-preview');
+            output.src = reader.result;
+            output.style.display = 'block';
+            document.getElementById('preview-text').style.display = 'none';
+            selectedImageBase64 = reader.result;
+        };
+        reader.readAsDataURL(event.target.files[0]);
+    }
+
+    function uploadProduct() {
+        const name = document.getElementById('pName').value;
+        const price = document.getElementById('pPrice').value;
+        
+        if(!name || !price || !selectedImageBase64) return alert("Completa todos los campos y sube una foto.");
+
+        const newP = {
+            id: Date.now(),
+            name: name,
+            price: parseFloat(price),
+            img: selectedImageBase64,
+            seller: "Tu Tienda"
+        };
+
+        products.unshift(newP);
+        renderProducts();
+        toggleModal('modalSell');
+        
+        // Limpiar campos
+        document.getElementById('pName').value = "";
+        document.getElementById('pPrice').value = "";
+        document.getElementById('img-preview').style.display = "none";
+        document.getElementById('preview-text').style.display = "block";
+    }
+
+    function renderProducts() {
+        const grid = document.getElementById('product-grid');
+        grid.innerHTML = products.map(p => `
+            <div class="card">
+                <img src="${p.img}">
+                <div class="card-body">
+                    <p style="font-size: 0.75rem; color: #697386; text-transform: uppercase; font-weight: bold;">Vendedor: ${p.seller}</p>
+                    <h3 style="margin-top: 5px; font-size: 1.1rem;">${p.name}</h3>
+                    <div class="price">$${p.price.toLocaleString()}</div>
+                    <button class="btn btn-primary" style="width: 100%; margin-top: 15px;" onclick="buyItem(${p.price})">Comprar Seguro</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function buyItem(price) {
+        const fee = price * 0.05;
+        adminEarnings += fee;
+        document.getElementById('earnings-val').innerText = `$${adminEarnings.toFixed(2)}`;
+        alert("¡Compra procesada! Se ha aplicado una tasa de protección DASTOR del 5%.");
+    }
+
+    function toggleModal(id) {
+        const m = document.getElementById(id);
+        m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function toggleCart() {
+        alert("Carrito seguro activado. Aquí aparecerán tus pedidos internacionales.");
+    }
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gánale al Coche - Ultra Speed Edition</title>
+    <style>
+        :root {
+            --bg-color: #f0e6ef;
+            --road-color: #d1cfe2;
+            --player-color: #ffb7b2;
+            --rival-color: #b2e2f2;
+            --accent: #b2f2bb;
+            --text-color: #6d6875;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            color: var(--text-color);
+        }
+
+        #game-container {
+            position: relative;
+            width: 450px;
+            height: 700px;
+            background: linear-gradient(to bottom, #a2d2ff 0%, #ffafcc 100%);
+            border: 10px solid white;
+            border-radius: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+
+        /* Carretera */
+        #road {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--road-color);
+            overflow: hidden;
+            border-left: 4px dashed white;
+            border-right: 4px dashed white;
+            box-sizing: border-box;
+        }
+
+        .lane-line {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 60px;
+            background-color: white;
+            opacity: 0.6;
+        }
+
+        /* UI */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            font-weight: bold;
+            font-size: 1.2rem;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            background-color: var(--player-color);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            cursor: pointer;
+            transition: 0.3s;
+            margin: 10px;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        button:hover { 
+            transform: translateY(-3px);
+            background-color: #ff9aa2;
+        }
+
+        /* Entidades */
+        .car {
+            position: absolute;
+            width: 45px;
+            height: 80px;
+            border-radius: 10px;
+        }
+
+        #player {
+            background-color: var(--player-color);
+            bottom: 30px;
+            box-shadow: 0 0 25px var(--player-color);
+            z-index: 5;
+        }
+
+        #rival {
+            background-color: var(--rival-color);
+            box-shadow: 0 0 25px var(--rival-color);
+            z-index: 4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .obstacle {
+            position: absolute;
+            width: 35px;
+            height: 35px;
+            background-color: #ffb347; /* Naranja pastel */
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            z-index: 3;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui-layer" class="hidden">
+            PUNTOS: <span id="score">0</span>
+        </div>
+
+        <div id="start-screen" class="screen">
+            <h1 style="color: #6d6875; letter-spacing: 2px;">GANALE AL COCHE</h1>
+            <p>Esquiva los conos. <br>¡Prepárate para la super velocidad!</p>
+            <button onclick="startGame('facil')">MODO PASEO</button>
+            <button onclick="startGame('normal')">MODO CARRERA</button>
+            <button onclick="startGame('dificil')">MODO LUZ</button>
+        </div>
+
+        <div id="end-screen" class="screen hidden">
+            <h2 id="end-title">CRASH!</h2>
+            <p>Tu récord de velocidad:</p>
+            <h1 id="final-score" style="font-size: 3rem; margin: 10px 0;">0</h1>
+            <button onclick="location.reload()">REINTENTAR</button>
+        </div>
+
+        <div id="road"></div>
+        <div id="player" class="car hidden"></div>
+        <div id="rival" class="car hidden"></div>
+    </div>
+
+    <script>
+        const road = document.getElementById('road');
+        const player = document.getElementById('player');
+        const rival = document.getElementById('rival');
+        const scoreDisplay = document.getElementById('score');
+        const startScreen = document.getElementById('start-screen');
+        const endScreen = document.getElementById('end-screen');
+
+        let gameState = {
+            active: false,
+            score: 0,
+            speed: 8,
+            playerX: 200,
+            rivalY: 50,
+            rivalBaseSpeed: 10,
+            difficultyMultiplier: 1,
+            obstacles: [],
+            frames: 0
+        };
+
+        // Líneas de la carretera
+        for (let i = 0; i < 12; i++) {
+            let line = document.createElement('div');
+            line.className = 'lane-line';
+            line.style.top = (i * 100) + 'px';
+            road.appendChild(line);
+        }
+
+        function startGame(mode) {
+            if(mode === 'normal') gameState.difficultyMultiplier = 1.4;
+            if(mode === 'dificil') gameState.difficultyMultiplier = 2.0;
+            
+            startScreen.classList.add('hidden');
+            player.classList.remove('hidden');
+            rival.classList.remove('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            
+            gameState.active = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (!gameState.active) return;
+            let rect = road.getBoundingClientRect();
+            let x = e.clientX - rect.left - 22;
+            if (x < 10) x = 10;
+            if (x > 395) x = 395;
+            gameState.playerX = x;
+            player.style.left = x + 'px';
+        });
+
+        function gameLoop() {
+            if (!gameState.active) return;
+            gameState.frames++;
+
+            // 1. AUMENTO DE VELOCIDAD DINÁMICO
+            // Cada 100 frames el juego acelera
+            if (gameState.frames % 100 === 0) {
+                gameState.speed += 0.2;
+                gameState.score += 5;
+            }
+
+            // El rival empieza rápido pero luego tú lo alcanzas
+            let currentRivalSpeed = gameState.frames < 500 ? (gameState.speed + 2) : (gameState.speed - 3);
+
+            // 2. ANIMACIÓN DE CARRETERA
+            document.querySelectorAll('.lane-line').forEach(line => {
+                let top = parseFloat(line.style.top);
+                top += gameState.speed;
+                if (top > 700) top = -60;
+                line.style.top = top + 'px';
+            });
+
+            // 3. MOVIMIENTO RIVAL
+            gameState.rivalY += (currentRivalSpeed - gameState.speed);
+            rival.style.top = gameState.rivalY + 'px';
+            rival.style.left = (200 + Math.sin(gameState.frames * 0.02) * 120) + 'px';
+
+            // 4. OBSTÁCULOS (Más frecuentes según velocidad)
+            if (Math.random() < (0.02 * gameState.difficultyMultiplier)) {
+                createObstacle();
+            }
+
+            gameState.obstacles.forEach((obs, index) => {
+                let top = parseFloat(obs.style.top);
+                top += gameState.speed;
+                obs.style.top = top + 'px';
+
+                if (checkCollision(player, obs)) endGame();
+
+                if (top > 700) {
+                    obs.remove();
+                    gameState.obstacles.splice(index, 1);
+                    gameState.score += 10;
+                    scoreDisplay.innerText = gameState.score;
+                }
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function createObstacle() {
+            const obs = document.createElement('div');
+            obs.className = 'obstacle';
+            obs.style.left = Math.random() * 400 + 'px';
+            obs.style.top = '-50px';
+            road.appendChild(obs);
+            gameState.obstacles.push(obs);
+        }
+
+        function checkCollision(a, b) {
+            let aRect = a.getBoundingClientRect();
+            let bRect = b.getBoundingClientRect();
+            return !(aRect.top > bRect.bottom || aRect.bottom < bRect.top || aRect.right < bRect.left || aRect.left > bRect.right);
+        }
+
+        function endGame() {
+            gameState.active = false;
+            endScreen.classList.remove('hidden');
+            document.getElementById('final-score').innerText = gameState.score;
+        }
+    </script>
+</body>
+</html>

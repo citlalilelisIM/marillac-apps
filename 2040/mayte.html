@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snoopy Surfers - ¡Perros a la vista!</title>
+    <style>
+        :root {
+            --sky: #87CEEB;
+            --grass: #4CAF50;
+            --road: #555;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: var(--sky);
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, var(--sky) 0%, var(--sky) 70%, var(--grass) 70%, var(--grass) 75%, var(--road) 75%);
+            cursor: pointer;
+        }
+
+        .cloud {
+            position: absolute;
+            background: white;
+            border-radius: 50px;
+            opacity: 0.8;
+            animation: moveClouds linear infinite;
+        }
+
+        @keyframes moveClouds {
+            from { right: -200px; }
+            to { right: 100%; }
+        }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px #000;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #super-jump-timer { color: #ff0; font-size: 18px; }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 15px;
+            display: none;
+            z-index: 200;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background: #e91e63;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="ui">
+        Monedas: <span id="coin-count">0</span><br>
+        Casas: <span id="obs-count">0</span><br>
+        Siguiente Súper Salto: <span id="super-jump-timer">32</span>s
+    </div>
+
+    <div id="game-over">
+        <h1>¡TE ATRAPARON!</h1>
+        <p>Monedas totales: <span id="final-coins">0</span></p>
+        <button onclick="resetGame(event)">REINTENTAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const coinEl = document.getElementById('coin-count');
+    const obsEl = document.getElementById('obs-count');
+    const sjEl = document.getElementById('super-jump-timer');
+    const container = document.getElementById('game-container');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let score = 0;
+    let coins = 0;
+    let gameActive = true;
+    let frame = 0;
+    let superJumpClock = 32;
+
+    const gravity = 0.8;
+    const roadY = canvas.height * 0.85;
+
+    for(let i=0; i<5; i++) {
+        let cloud = document.createElement('div');
+        cloud.className = 'cloud';
+        cloud.style.width = (Math.random() * 100 + 100) + 'px';
+        cloud.style.height = '40px';
+        cloud.style.top = (Math.random() * 200) + 'px';
+        cloud.style.animationDuration = (Math.random() * 25 + 15) + 's';
+        container.appendChild(cloud);
+    }
+
+    const snoopy = {
+        x: 150,
+        y: roadY - 50,
+        w: 40,
+        h: 40,
+        dy: 0,
+        jumpForce: -14,
+        jumpsDone: 0,
+        maxJumps: 2,
+        superJumpActive: false,
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            if(this.superJumpActive) { ctx.shadowBlur = 25; ctx.shadowColor = "yellow"; }
+            ctx.fillStyle = "white";
+            ctx.beginPath(); ctx.ellipse(20, 20, 18, 12, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(30, 10, 10, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "black";
+            ctx.beginPath(); ctx.ellipse(28, 12, 3, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+    };
+
+    let obstacles = [];
+    let coinObjects = [];
+    let greyDogs = [];
+
+    function spawnObstacle() {
+        obstacles.push({ 
+            x: canvas.width, 
+            y: roadY - 50, 
+            w: 55, 
+            h: 50, 
+            speed: 8,
+            hasSpawnedDog: false // Para que solo salga un perro por casa
+        });
+    }
+
+    function spawnGreyDog(x, y) {
+        greyDogs.push({
+            x: x,
+            y: roadY - 30,
+            w: 35,
+            h: 25,
+            speed: 12 // El perro es más rápido que la casa
+        });
+    }
+
+    function spawnCoinRow() {
+        const rowLength = Math.floor(Math.random() * 3) + 3;
+        const startX = canvas.width;
+        const startY = roadY - 140 - Math.random() * 80;
+        for(let i = 0; i < rowLength; i++) {
+            coinObjects.push({ x: startX + (i * 45), y: startY, r: 10, speed: 8 });
+        }
+    }
+
+    function handleJump() {
+        if(!gameActive) return;
+        if(snoopy.jumpsDone < snoopy.maxJumps) {
+            let force = (snoopy.superJumpActive && snoopy.jumpsDone === 0) ? -26 : snoopy.jumpForce;
+            snoopy.dy = force;
+            snoopy.jumpsDone++;
+            if(force === -26) snoopy.superJumpActive = false;
+        }
+    }
+
+    window.addEventListener('keydown', e => { if(e.code === 'Space' || e.code === 'ArrowUp') handleJump(); });
+    container.addEventListener('mousedown', e => { if(e.target.tagName !== 'BUTTON') handleJump(); });
+
+    function resetGame(e) {
+        if(e) e.stopPropagation();
+        score = 0; coins = 0; frame = 0; superJumpClock = 32;
+        obstacles = []; coinObjects = []; greyDogs = [];
+        snoopy.y = roadY - 50; snoopy.dy = 0; snoopy.jumpsDone = 0;
+        gameActive = true;
+        document.getElementById('game-over').style.display = 'none';
+        loop();
+    }
+
+    function loop() {
+        if(!gameActive) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if(frame % 60 === 0 && !snoopy.superJumpActive) {
+            superJumpClock--;
+            if(superJumpClock <= 0) { snoopy.superJumpActive = true; superJumpClock = 32; }
+            sjEl.innerText = superJumpClock;
+        }
+
+        snoopy.dy += gravity;
+        snoopy.y += snoopy.dy;
+        if(snoopy.y > roadY - snoopy.h) { snoopy.y = roadY - snoopy.h; snoopy.dy = 0; snoopy.jumpsDone = 0; }
+        snoopy.draw();
+
+        // Casas (Obstáculos)
+        if(frame % 100 === 0) spawnObstacle();
+        obstacles.forEach((obs, i) => {
+            obs.x -= obs.speed;
+            ctx.fillStyle = "red";
+            ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            ctx.fillStyle = "#333";
+            ctx.fillRect(obs.x + 15, obs.y + 20, 25, 30); // Puerta
+
+            // Lógica para que salga el perro cuando la casa está a cierta distancia
+            if(!obs.hasSpawnedDog && obs.x < canvas.width - 100) {
+                spawnGreyDog(obs.x + 15, obs.y + 20);
+                obs.hasSpawnedDog = true;
+            }
+
+            if(snoopy.x < obs.x + obs.w && snoopy.x + snoopy.w > obs.x && snoopy.y < obs.y + obs.h && snoopy.y + snoopy.h > obs.y) {
+                gameActive = false;
+                document.getElementById('final-coins').innerText = coins;
+                document.getElementById('game-over').style.display = 'block';
+            }
+            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score++; obsEl.innerText = score; }
+        });
+
+        // Perros Grises
+        greyDogs.forEach((dog, i) => {
+            dog.x -= dog.speed;
+            ctx.fillStyle = "grey";
+            // Dibujar forma de perro simple
+            ctx.fillRect(dog.x, dog.y, dog.w, dog.h);
+            ctx.fillStyle = "black";
+            ctx.fillRect(dog.x, dog.y + 5, 5, 5); // Ojo
+            
+            if(snoopy.x < dog.x + dog.w && snoopy.x + snoopy.w > dog.x && snoopy.y < dog.y + dog.h && snoopy.y + snoopy.h > dog.y) {
+                gameActive = false;
+                document.getElementById('final-coins').innerText = coins;
+                document.getElementById('game-over').style.display = 'block';
+            }
+            if(dog.x + dog.w < 0) greyDogs.splice(i, 1);
+        });
+
+        // Monedas
+        if(frame % 130 === 0) spawnCoinRow();
+        coinObjects.forEach((c, i) => {
+            c.x -= c.speed;
+            ctx.fillStyle = "gold";
+            ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
+            let dx = (snoopy.x + 20) - c.x;
+            let dy = (snoopy.y + 20) - c.y;
+            if(Math.sqrt(dx*dx + dy*dy) < 30) { coinObjects.splice(i, 1); coins++; coinEl.innerText = coins; }
+            if(c.x + 20 < 0) coinObjects.splice(i, 1);
+        });
+
+        frame++;
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+</html>

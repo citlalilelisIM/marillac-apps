@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cachorro Trucker 3D: Realismo Troll</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: white;
+            z-index: 10; text-shadow: 2px 2px #000;
+            background: rgba(0,0,0,0.7); padding: 15px; border: 2px solid #fff;
+        }
+        #game-over {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; text-align: center; display: none; z-index: 20;
+            background: rgba(0,0,0,0.9); padding: 40px; border: 5px solid red;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 4px; height: 4px; background: red;
+            transform: translate(-50%, -50%); border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <b>LUGAR:</b> <span id="biome-name">Generando...</span><br>
+    <b>NIVEL:</b> <span id="lvl">1</span> | <b>MUERTES:</b> <span id="deaths">0</span>
+    <div style="font-size: 0.8em; margin-top:5px;">[WASD] Caminar | [ESPACIO] Saltar</div>
+</div>
+
+<div id="crosshair"></div>
+
+<div id="game-over">
+    <h1 style="color:red;">¡CRASH!</h1>
+    <p>Te has caído del camión. El asfalto no perdona.</p>
+    <button onclick="createLevel()" style="padding:10px 20px; cursor:pointer;">REINTENTAR (R)</button>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let width, height, level = 1, deaths = 0, gameActive = true;
+const keys = {};
+
+const biomes = [
+    { name: "RUTA DEL DESIERTO", sky: "#ff7f50", ground: "#c2b280", fog: "rgba(255,127,80,0.5)", decor: "🌵" },
+    { name: "PASO DE MONTAÑA", sky: "#4682b4", ground: "#2f4f4f", fog: "rgba(255,255,255,0.4)", decor: "❄️" },
+    { name: "AUTOPISTA COSTERA", sky: "#00ced1", ground: "#f4a460", fog: "rgba(0,206,209,0.3)", decor: "🌴" },
+    { name: "METRÓPOLIS TROLL", sky: "#1a1a2e", ground: "#0f0f0f", fog: "rgba(75,0,130,0.6)", decor: "🏢" }
+];
+let currentBiome = biomes[0];
+
+const player = {
+    x: 0, y: 2, z: 5,
+    vx: 0, vy: 0, vz: 0,
+    speed: 0.04, // Personaje más lento
+    jumping: false
+};
+
+let trucks = [];
+
+function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+}
+
+function createLevel() {
+    trucks = [];
+    player.x = 0; player.y = 2.5; player.z = 5;
+    player.vx = 0; player.vy = 0; player.vz = 0;
+    currentBiome = biomes[Math.floor(Math.random() * biomes.length)];
+    document.getElementById('biome-name').innerText = currentBiome.name;
+    document.getElementById('game-over').style.display = 'none';
+    gameActive = true;
+
+    // Base inicial: Un camión de carga largo y estático
+    trucks.push({ x: 0, z: 5, w: 4, h: 2, d: 12, speed: 0, color: "#333", isBase: true });
+
+    // Generar MUCHOS camiones
+    for(let i=0; i < 60; i++) {
+        trucks.push({
+            x: (Math.random() - 0.5) * 20,
+            z: 25 + (i * 7),
+            w: 2.2, h: 2.1, d: 5.5,
+            speed: 0.04 + (Math.random() * 0.12),
+            type: Math.random() > 0.9 ? 'fake' : 'normal'
+        });
+    }
+}
+
+function project(x, y, z) {
+    let dz = z - player.z;
+    if (dz < 0.1) return null;
+    const fov = 600;
+    const scale = fov / dz;
+    return {
+        x: width/2 + (x - player.x) * scale,
+        y: height/2 - (y - player.y) * scale,
+        scale: scale
+    };
+}
+
+function drawTruck(t) {
+    const pTopBack = project(t.x - t.w/2, t.h, t.z + t.d/2);
+    const pTopFront = project(t.x + t.w/2, t.h, t.z - t.d/2);
+    
+    if (!pTopBack || !pTopFront) return;
+
+    const scale = pTopFront.scale;
+    
+    // Coordenadas proyectadas de las esquinas del techo
+    const p1 = project(t.x - t.w/2, t.h, t.z - t.d/2);
+    const p2 = project(t.x + t.w/2, t.h, t.z - t.d/2);
+    const p3 = project(t.x + t.w/2, t.h, t.z + t.d/2);
+    const p4 = project(t.x - t.w/2, t.h, t.z + t.d/2);
+
+    // Esquinas de la base
+    const b1 = project(t.x - t.w/2, 0.4, t.z - t.d/2);
+    const b2 = project(t.x + t.w/2, 0.4, t.z - t.d/2);
+
+    // 1. Dibujar Cuerpo (Caja de carga blanca)
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#999";
+    ctx.lineWidth = 1;
+
+    if (p1 && p2 && b1 && b2) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(b2.x, b2.y); ctx.lineTo(b1.x, b1.y);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+    }
+
+    // 2. Dibujar Techo
+    ctx.fillStyle = "#f0f0f0";
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // 3. Dibujar Cabina (Lo que hace que parezca camión)
+    const cabZ = t.z - t.d/2 - 0.5;
+    const c1 = project(t.x - t.w/2.2, 1.2, cabZ);
+    const c2 = project(t.x + t.w/2.2, 1.2, cabZ);
+    const c3 = project(t.x + t.w/2.2, 0.4, cabZ);
+    const c4 = project(t.x - t.w/2.2, 0.4, cabZ);
+
+    if (c1 && c2 && c3 && c4) {
+        ctx.fillStyle = "#ddd";
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y); ctx.lineTo(c2.x, c2.y);
+        ctx.lineTo(c3.x, c3.y); ctx.lineTo(c4.x, c4.y);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        // Parabrisas (Ventana)
+        ctx.fillStyle = "#33aaff";
+        ctx.fillRect(c1.x + 5, c1.y + 5, (c2.x - c1.x) - 10, (c3.y - c1.y) * 0.4);
+    }
+
+    // 4. Ruedas (Simples círculos negros abajo)
+    ctx.fillStyle = "#111";
+    [b1, b2].forEach(p => {
+        if (p) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y + 5, 4 * (p.scale/100), 0, Math.PI*2);
+            ctx.fill();
+        }
+    });
+}
+
+function update() {
+    if(!gameActive) return;
+
+    if(keys['w']) player.vz += player.speed;
+    if(keys['s']) player.vz -= player.speed;
+    if(keys['a']) player.vx -= player.speed;
+    if(keys['d']) player.vx += player.speed;
+    if(keys[' '] && !player.jumping) { player.vy = 0.22; player.jumping = true; }
+
+    player.vx *= 0.9; player.vz *= 0.9;
+    player.vy -= 0.01;
+    player.x += player.vx; player.y += player.vy; player.z += player.vz;
+
+    trucks.forEach(t => {
+        if(!t.isBase) t.z -= t.speed;
+        
+        if(player.z > t.z - t.d/2 && player.z < t.z + t.d/2 &&
+           player.x > t.x - t.w/2 && player.x < t.x + t.w/2) {
+            if(t.type === 'fake') return;
+            if(player.y <= t.h && player.y > t.h - 1) {
+                player.y = t.h; player.vy = 0; player.jumping = false;
+                player.z -= t.speed; // Se mueve con el camión
+            }
+        }
+    });
+
+    if(player.y < 0) {
+        gameActive = false;
+        deaths++;
+        document.getElementById('deaths').innerText = deaths;
+        document.getElementById('game-over').style.display = 'block';
+    }
+
+    if(player.z > 400) { level++; createLevel(); document.getElementById('lvl').innerText = level; }
+}
+
+function draw() {
+    // Cielo
+    ctx.fillStyle = currentBiome.sky;
+    ctx.fillRect(0,0,width,height);
+
+    // Horizonte y suelo
+    ctx.fillStyle = currentBiome.ground;
+    ctx.fillRect(0, height/2, width, height/2);
+
+    // Decoración de fondo (lejana)
+    ctx.font = "40px serif";
+    for(let i=0; i<10; i++) {
+        let p = project((i%2==0?20:-20), 0, player.z + 50 + (i*20));
+        if(p) ctx.fillText(currentBiome.decor, p.x, p.y);
+    }
+
+    // Dibujar camiones (ordenados por distancia)
+    trucks.filter(t => t.z > player.z - 5).sort((a,b) => b.z - a.z).forEach(drawTruck);
+
+    // Niebla de atmósfera
+    ctx.fillStyle = currentBiome.fog;
+    ctx.fillRect(0,0,width,height);
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+window.onkeydown = e => { keys[e.key.toLowerCase()] = true; if(e.key === 'r') createLevel(); };
+window.onkeyup = e => keys[e.key.toLowerCase()] = false;
+window.onresize = resize;
+resize(); createLevel(); loop();
+</script>
+</body>
+</html>
