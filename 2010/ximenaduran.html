@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monsters Inc: Sustos a Domicilio</title>
+    <style>
+        :root {
+            --sulley-blue: #00d2d3;
+            --sulley-purple: #a55eea;
+            --mike-green: #9dfd24;
+            --tank-orange: #ff9f43;
+            --door-pink: #ff9ff3;
+            --factory-gray: #576574;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial Black', sans-serif;
+            background-color: var(--factory-gray);
+            /* Patrón de fondo de puertas retro */
+            background-image: radial-gradient(var(--sulley-blue) 0.5px, transparent 0.5px);
+            background-size: 30px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" fill="red"/></svg>') 6 6, auto;
+        }
+
+        /* --- INTERFAZ (HUD) --- */
+        #hud {
+            width: 90%;
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #222;
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 4px solid var(--mike-green);
+            box-shadow: 0 0 20px rgba(157, 253, 36, 0.4);
+            z-index: 100;
+        }
+
+        .stat { color: white; font-size: 1.2rem; }
+        .stat span { color: var(--mike-green); }
+
+        /* --- TANQUES DE GRITOS (VIDAS) --- */
+        #lives-container { display: flex; gap: 15px; }
+
+        .tank {
+            width: 30px;
+            height: 60px;
+            border: 3px solid #ced4da;
+            border-radius: 5px;
+            background: #333;
+            position: relative;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .tank-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to right, var(--tank-orange), #ffcd3c, var(--tank-orange));
+            transition: height 0.5s ease-in-out;
+        }
+
+        .tank-fill.empty { height: 0% !important; }
+
+        /* --- ÁREA DE JUEGO --- */
+        #game-canvas {
+            position: relative;
+            width: 900px;
+            height: 550px;
+            margin-top: 20px;
+            background: #111;
+            border: 15px solid var(--sulley-blue);
+            border-radius: 40px;
+            overflow: hidden;
+            /* Manchas moradas estilo Sulley en el borde */
+            box-shadow: 0 0 0 5px var(--sulley-purple), 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .door {
+            position: absolute;
+            width: 100px;
+            height: 150px;
+            background: var(--door-pink);
+            border: 6px solid white;
+            border-radius: 10px 10px 0 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+            animation: emerge 0.3s ease-out;
+        }
+
+        @keyframes emerge {
+            from { transform: scale(0) rotate(-10deg); }
+            to { transform: scale(1) rotate(0deg); }
+        }
+
+        .kid { font-size: 4rem; cursor: pointer; user-select: none; }
+
+        /* --- PANTALLAS OVERLAY --- */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--sulley-blue);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            color: white;
+            text-align: center;
+        }
+
+        h1 { 
+            font-size: 5rem; 
+            margin: 0; 
+            -webkit-text-stroke: 3px var(--sulley-purple);
+            text-shadow: 5px 5px 0px var(--factory-gray);
+        }
+
+        button {
+            margin-top: 30px;
+            padding: 20px 60px;
+            font-size: 2rem;
+            background: var(--mike-green);
+            color: #222;
+            border: none;
+            border-radius: 100px;
+            cursor: pointer;
+            font-family: 'Arial Black', sans-serif;
+            box-shadow: 0 8px 0px #6eb31a;
+            transition: all 0.1s;
+        }
+
+        button:hover { transform: scale(1.05); }
+        button:active { transform: translateY(4px); box-shadow: 0 4px 0px #6eb31a; }
+
+        .character-art { font-size: 6rem; margin-bottom: 20px; }
+        .hidden { display: none !important; }
+
+        footer { margin-top: auto; padding: 20px; color: var(--mike-green); letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div class="stat">GRITOS: <span id="score">0</span></div>
+        <div id="lives-container"></div>
+        <div class="stat">TURNO: <span id="timer">30</span>s</div>
+    </div>
+
+    <div id="game-canvas">
+        <div id="start-screen" class="overlay">
+            <div class="character-art">👁️‍🗨️ 👾</div>
+            <h1>MONSTERS INC.</h1>
+            <p style="font-size: 1.5rem;">Haz clic en los niños para llenar los tanques.</p>
+            <button onclick="startGame()">¡A SUSTAR!</button>
+        </div>
+
+        <div id="end-screen" class="overlay hidden" style="background: var(--sulley-purple);">
+            <h1 id="end-title">TURNO FINALIZADO</h1>
+            <p style="font-size: 2rem;">Energía recolectada: <span id="final-score" style="color: var(--mike-green);">0</span></p>
+            <button onclick="startGame()">OTRO TURNO</button>
+        </div>
+    </div>
+
+    <footer>Creado por ximena</footer>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const livesContainer = document.getElementById('lives-container');
+        const startScreen = document.getElementById('start-screen');
+        const endScreen = document.getElementById('end-screen');
+
+        let score = 0;
+        let time = 30;
+        let lives = 5;
+        let gameActive = false;
+        let spawnTimeout;
+        let gameClock;
+
+        function initTanks() {
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < 5; i++) {
+                const tank = document.createElement('div');
+                tank.className = 'tank';
+                tank.innerHTML = '<div class="tank-fill"></div>';
+                livesContainer.appendChild(tank);
+            }
+        }
+
+        function updateTanks() {
+            const fills = document.querySelectorAll('.tank-fill');
+            fills.forEach((fill, i) => {
+                if (i >= lives) fill.classList.add('empty');
+                else fill.classList.remove('empty');
+            });
+        }
+
+        function startGame() {
+            score = 0;
+            time = 30;
+            lives = 5;
+            gameActive = true;
+            scoreEl.innerText = score;
+            timerEl.innerText = time;
+            
+            startScreen.classList.add('hidden');
+            endScreen.classList.add('hidden');
+            
+            initTanks();
+            spawnLoop();
+            
+            gameClock = setInterval(() => {
+                time--;
+                timerEl.innerText = time;
+                if (time <= 0) endGame("TIEMPO AGOTADO");
+            }, 1000);
+        }
+
+        function spawnLoop() {
+            if (!gameActive) return;
+
+            const door = document.createElement('div');
+            door.className = 'door';
+            
+            // Colores de puertas variados
+            const colors = ['#ff9ff3', '#feca57', '#54a0ff', '#5f27cd'];
+            door.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            const x = Math.random() * (canvas.offsetWidth - 130);
+            const y = Math.random() * (canvas.offsetHeight - 180);
+            door.style.left = x + 'px';
+            door.style.top = y + 'px';
+
+            const kid = document.createElement('div');
+            kid.className = 'kid';
+            const targets = ['👦', '👧', '👶', '🧸'];
+            kid.innerText = targets[Math.floor(Math.random() * targets.length)];
+
+            door.appendChild(kid);
+            canvas.appendChild(door);
+
+            let hit = false;
+            door.onclick = () => {
+                if (hit) return;
+                hit = true;
+                score += 20;
+                scoreEl.innerText = score;
+                door.style.transform = 'scale(1.2)';
+                door.style.opacity = '0';
+                setTimeout(() => door.remove(), 200);
+            };
+
+            // Los niños se van rápido
+            setTimeout(() => {
+                if (!hit) {
+                    door.style.transform = 'scale(0.5)';
+                    door.style.opacity = '0';
+                    lives--;
+                    updateTanks();
+                    if (lives <= 0) endGame("SIN TANQUES");
+                    setTimeout(() => door.remove(), 300);
+                }
+            }, 1000); 
+
+            const speed = Math.max(300, 800 - (score / 2));
+            spawnTimeout = setTimeout(spawnLoop, speed);
+        }
+
+        function endGame(msg) {
+            gameActive = false;
+            clearTimeout(spawnTimeout);
+            clearInterval(gameClock);
+            document.querySelectorAll('.door').forEach(d => d.remove());
+            document.getElementById('end-title').innerText = msg;
+            document.getElementById('final-score').innerText = score;
+            endScreen.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

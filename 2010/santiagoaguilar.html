@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFS Santiago 3D</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #fff;
+            font-family: 'Arial Black', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 3px solid #ff0000;
+            box-shadow: 0 0 30px #ff0000;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            text-shadow: 2px 2px #000;
+        }
+
+        .speed-bar {
+            color: #ff0000;
+            font-size: 24px;
+            font-style: italic;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            text-align: center;
+        }
+
+        h1 { color: #ff0000; font-size: 3.5rem; margin: 0; font-style: italic; }
+        .hidden { display: none; }
+
+        button {
+            background: transparent;
+            color: #ff0000;
+            border: 2px solid #ff0000;
+            padding: 15px 30px;
+            font-family: inherit;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            background: #ff0000;
+            color: #000;
+            box-shadow: 0 0 20px #ff0000;
+        }
+
+        .author { position: absolute; bottom: 10px; font-size: 0.8rem; opacity: 0.6; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="hud">
+        <div class="speed-bar">VELOCIDAD: <span id="speed-val">0</span> KM/H</div>
+        <div>PUNTOS: <span id="score-val">0</span></div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <h1>NEED FOR SPEED</h1>
+        <p>SANTIAGO 3D DRIFT</p>
+        <button onclick="startGame()">ARRANCAR MOTOR</button>
+    </div>
+
+    <div id="death-screen" class="overlay hidden">
+        <h1>TOTALED</h1>
+        <p>Puntuación: <span id="final-score">0</span></p>
+        <button onclick="startGame()">REINTENTAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    <div class="author">Creado por santiago</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800;
+    canvas.height = 600;
+
+    // Variables de juego
+    let speed = 0;
+    const maxSpeed = 100;
+    let position = 0;
+    let playerX = 0;
+    let score = 0;
+    let running = false;
+    const keys = {};
+
+    // Configuración de carretera
+    const segmentLength = 200;
+    const roadWidth = 2000;
+    const cameraDepth = 0.8;
+    const drawDistance = 300;
+
+    // Generar segmentos de carretera (rectos y curvas)
+    let segments = [];
+    for (let i = 0; i < 5000; i++) {
+        segments.push({
+            p1: { world: { z: i * segmentLength }, screen: {} },
+            p2: { world: { z: (i + 1) * segmentLength }, screen: {} },
+            color: Math.floor(i / 3) % 2 ? '#111' : '#1a1a1a',
+            curve: Math.sin(i / 30) * 2 // Genera curvas suaves
+        });
+    }
+
+    function project(p, cameraX, cameraY, cameraZ) {
+        p.screen.scale = cameraDepth / (p.world.z - cameraZ);
+        p.screen.x = (1 + p.screen.scale * (p.world.x - cameraX)) * canvas.width / 2;
+        p.screen.y = (1 - p.screen.scale * (p.world.y - cameraY)) * canvas.height / 2;
+        p.screen.w = p.screen.scale * roadWidth * canvas.width / 2;
+    }
+
+    function drawPolygon(x1, y1, w1, x2, y2, w2, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x1 - w1, y1);
+        ctx.lineTo(x2 - w2, y2);
+        ctx.lineTo(x2 + w2, y2);
+        ctx.lineTo(x1 + w1, y1);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    window.onkeydown = e => keys[e.code] = true;
+    window.onkeyup = e => keys[e.code] = false;
+
+    function startGame() {
+        speed = 0;
+        position = 0;
+        playerX = 0;
+        score = 0;
+        running = true;
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('death-screen').classList.add('hidden');
+        update();
+    }
+
+    function update() {
+        if (!running) return;
+
+        // Física y controles
+        if (keys['ArrowUp'] || keys['KeyW']) speed = Math.min(speed + 1, maxSpeed);
+        else speed = Math.max(speed - 0.5, 0);
+
+        if (keys['ArrowLeft'] || keys['KeyA']) playerX -= 0.05 * (speed/50);
+        if (keys['ArrowRight'] || keys['KeyD']) playerX += 0.05 * (speed/50);
+
+        // Si te sales de la carretera a mucha velocidad, pierdes
+        if (Math.abs(playerX) > 1.2 && speed > 30) {
+            running = false;
+            document.getElementById('death-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = Math.floor(score);
+        }
+
+        position += speed * 10;
+        score += speed / 10;
+
+        document.getElementById('speed-val').innerText = Math.floor(speed * 3);
+        document.getElementById('score-val').innerText = Math.floor(score);
+
+        render();
+        requestAnimationFrame(update);
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Cielo y suelo base
+        ctx.fillStyle = '#050005';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const startPos = Math.floor(position / segmentLength);
+        let x = 0, dx = 0;
+
+        // Dibujar carretera desde el fondo hacia adelante (Pintor)
+        for (let n = 0; n < drawDistance; n++) {
+            const segment = segments[(startPos + n) % segments.length];
+            
+            // Proyectar puntos 3D a 2D
+            project(segment.p1, playerX * roadWidth - x, 1500, position);
+            project(segment.p2, playerX * roadWidth - x - dx, 1500, position);
+            
+            x += dx;
+            dx += segment.curve;
+
+            if (segment.p1.screen.y <= segment.p2.screen.y) continue;
+
+            // Dibujar asfalto
+            drawPolygon(
+                segment.p1.screen.x, segment.p1.screen.y, segment.p1.screen.w,
+                segment.p2.screen.x, segment.p2.screen.y, segment.p2.screen.w,
+                segment.color
+            );
+
+            // Líneas laterales de neón rojo
+            const sideColor = "#ff0000";
+            drawPolygon(
+                segment.p1.screen.x - segment.p1.screen.w * 1.05, segment.p1.screen.y, segment.p1.screen.w * 0.05,
+                segment.p2.screen.x - segment.p2.screen.w * 1.05, segment.p2.screen.y, segment.p2.screen.w * 0.05,
+                sideColor
+            );
+            drawPolygon(
+                segment.p1.screen.x + segment.p1.screen.w * 1.05, segment.p1.screen.y, segment.p1.screen.w * 0.05,
+                segment.p2.screen.x + segment.p2.screen.w * 1.05, segment.p2.screen.y, segment.p2.screen.w * 0.05,
+                sideColor
+            );
+        }
+
+        // Dibujar coche del jugador (Sprite 2D fijo con efecto de rebote)
+        const bounce = Math.sin(Date.now() / 50) * (speed / 20);
+        ctx.fillStyle = '#00f2ff';
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#00f2ff';
+        // Cuerpo del coche
+        ctx.fillRect(canvas.width / 2 - 40, 480 + bounce, 80, 40);
+        // Luces traseras
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(canvas.width / 2 - 35, 500 + bounce, 15, 10);
+        ctx.fillRect(canvas.width / 2 + 20, 500 + bounce, 15, 10);
+        ctx.shadowBlur = 0;
+    }
+
+    render();
+</script>
+</body>
+</html>

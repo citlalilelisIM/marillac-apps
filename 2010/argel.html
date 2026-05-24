@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pesadilla en las Habitaciones</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --wall: #1a1a2e;
+            --text: #e0e0e0;
+            --accent: #ff4d4d;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 50px rgba(0,0,0,0.9);
+        }
+
+        canvas {
+            display: block;
+            background: #000;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            text-align: center;
+        }
+
+        h1 { font-size: 3rem; color: var(--accent); margin: 0; }
+        p { margin: 10px 0 25px; line-height: 1.5; }
+
+        button {
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            background: transparent;
+            color: white;
+            border: 2px solid var(--accent);
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover { background: var(--accent); }
+
+        #hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            z-index: 5;
+        }
+
+        #credits {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            color: #444;
+            font-size: 0.8rem;
+        }
+
+        .controls-hint {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 15px;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="hud" class="hidden">Habitaciones superadas: <span id="score">0</span></div>
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="screen-start" class="overlay">
+            <h1>LABERINTO OSCURO</h1>
+            <p>Escapa de las habitaciones sin que te atrapen.<br>El monstruo ahora choca con las paredes.</p>
+            <button onclick="startGame()">INICIAR ESCAPE</button>
+            <div class="controls-hint">
+                Mover: Flechas / WASD<br>
+                Linterna: <b>Tecla Q</b> (Úsala con sabiduría)
+            </div>
+        </div>
+
+        <div id="screen-over" class="overlay hidden">
+            <h1 style="color: white;">TE ENCONTRÓ...</h1>
+            <p id="final-score"></p>
+            <button onclick="startGame()">INTENTAR DE NUEVO</button>
+        </div>
+
+        <div id="credits">Creado por israel</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreText = document.getElementById('score');
+    
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let gameRunning = false;
+    let score = 0;
+    let flashlightOn = true;
+    let player, monster, walls, exit;
+    const keys = {};
+
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if(e.code === 'KeyQ') flashlightOn = !flashlightOn; // Alternar linterna
+    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    class Character {
+        constructor(x, y, emoji, speed) {
+            this.x = x;
+            this.y = y;
+            this.emoji = emoji;
+            this.speed = speed;
+            this.radius = 15;
+        }
+
+        draw() {
+            ctx.font = "24px serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(this.emoji, this.x, this.y);
+        }
+    }
+
+    function createMap() {
+        walls = [];
+        // Bordes del mapa
+        walls.push({x: 0, y: 0, w: 800, h: 10});
+        walls.push({x: 0, y: 590, w: 800, h: 10});
+        walls.push({x: 0, y: 0, w: 10, h: 600});
+        walls.push({x: 790, y: 0, w: 10, h: 600});
+
+        // Habitaciones internas (aleatorias pero dejando pasillos)
+        for(let i = 0; i < 8; i++) {
+            walls.push({
+                x: Math.floor(Math.random() * 5 + 1) * 100,
+                y: Math.floor(Math.random() * 4 + 1) * 100,
+                w: Math.random() > 0.5 ? 15 : 120,
+                h: Math.random() > 0.5 ? 120 : 15
+            });
+        }
+
+        player = new Character(50, 50, "🏃", 3.5);
+        monster = new Character(700, 500, "👹", 2 + (score * 0.2));
+        exit = { x: 740, y: 540, size: 35 };
+    }
+
+    function checkCollision(x, y, radius) {
+        for (let wall of walls) {
+            if (x + radius > wall.x && x - radius < wall.x + wall.w &&
+                y + radius > wall.y && y - radius < wall.y + wall.h) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function update() {
+        if (!gameRunning) return;
+
+        // Movimiento Jugador
+        let nextX = player.x;
+        let nextY = player.y;
+
+        if (keys['ArrowUp'] || keys['KeyW']) nextY -= player.speed;
+        if (keys['ArrowDown'] || keys['KeyS']) nextY += player.speed;
+        if (keys['ArrowLeft'] || keys['KeyA']) nextX -= player.speed;
+        if (keys['ArrowRight'] || keys['KeyD']) nextX += player.speed;
+
+        if (!checkCollision(nextX, player.y, player.radius)) player.x = nextX;
+        if (!checkCollision(player.x, nextY, player.radius)) player.y = nextY;
+
+        // Movimiento Monstruo (IA que detecta paredes)
+        let mNextX = monster.x;
+        let mNextY = monster.y;
+
+        const dx = player.x - monster.x;
+        const dy = player.y - monster.y;
+        const angle = Math.atan2(dy, dx);
+
+        mNextX += Math.cos(angle) * monster.speed;
+        mNextY += Math.sin(angle) * monster.speed;
+
+        // El monstruo solo avanza si no hay pared
+        if (!checkCollision(mNextX, monster.y, monster.radius)) {
+            monster.x = mNextX;
+        } else {
+            // Si choca, intenta deslizarse por la pared
+            if (!checkCollision(monster.x, mNextY, monster.radius)) monster.y = mNextY;
+        }
+        if (!checkCollision(monster.x, mNextY, monster.radius)) {
+            monster.y = mNextY;
+        }
+
+        // Colisión Muerte
+        const dist = Math.hypot(player.x - monster.x, player.y - monster.y);
+        if (dist < 25) endGame();
+
+        // Victoria de nivel
+        if (player.x > exit.x && player.y > exit.y) {
+            score++;
+            scoreText.innerText = score;
+            createMap();
+        }
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function draw() {
+        // Fondo
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Salida
+        ctx.font = "30px Arial";
+        ctx.fillText("🚪", exit.x + 15, exit.y + 15);
+
+        // Paredes
+        ctx.fillStyle = "#1a1a2e";
+        walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+        // Dibujar personajes
+        monster.draw();
+        player.draw();
+
+        // CAPA DE OSCURIDAD / LINTERNA
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        
+        if (flashlightOn) {
+            // Círculo de luz alrededor del jugador
+            ctx.arc(player.x, player.y, 120, 0, Math.PI * 2, true);
+        } else {
+            // Solo un pequeño brillo si la linterna está apagada
+            ctx.arc(player.x, player.y, 30, 0, Math.PI * 2, true);
+        }
+        
+        ctx.clip();
+        ctx.fillStyle = "rgba(0,0,0,0.98)";
+        ctx.fill();
+        ctx.restore();
+
+        // Efecto visual de batería baja o parpadeo
+        if (flashlightOn && Math.random() > 0.99) {
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+        }
+    }
+
+    function startGame() {
+        score = 0;
+        scoreText.innerText = score;
+        gameRunning = true;
+        flashlightOn = true;
+        document.getElementById('screen-start').classList.add('hidden');
+        document.getElementById('screen-over').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        createMap();
+        update();
+    }
+
+    function endGame() {
+        gameRunning = false;
+        document.getElementById('screen-over').classList.remove('hidden');
+        document.getElementById('final-score').innerText = "Llegaste hasta la habitación " + score;
+    }
+
+</script>
+</body>
+</html>

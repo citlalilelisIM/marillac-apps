@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Vegas Neon Kart - El Líder Brilla</title>
+    <style>
+        body {
+            margin: 0;
+            background: #050010;
+            color: #00ffff;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.2);
+        }
+
+        canvas {
+            display: block;
+            background: #000;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border: 1px solid #ff00ff;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .leader-board {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #00ffff;
+            font-size: 0.9em;
+        }
+
+        .controls-hint {
+            margin-top: 15px;
+            color: #ff00ff;
+            font-size: 0.8em;
+            text-shadow: 0 0 5px #ff00ff;
+        }
+
+        #victory-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 5px solid #00ffff;
+            padding: 40px;
+            display: none;
+            text-align: center;
+            z-index: 100;
+        }
+
+        button {
+            background: #ff00ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="hud">
+            <div>Distancia: <span id="speed-val">0</span>m</div>
+            <div style="color: #ff00ff">Meta: 5000m</div>
+        </div>
+
+        <div class="leader-board" id="ranking">
+            1. ---<br>2. ---<br>3. ---<br>4. ---
+        </div>
+
+        <canvas id="raceCanvas"></canvas>
+
+        <div id="victory-screen">
+            <h1 id="winner-text">¡GANASTE!</h1>
+            <button onclick="location.reload()">REINTENTAR</button>
+        </div>
+    </div>
+
+    <div class="controls-hint">Usa las FLECHAS: ↑ Acelerar | ← → Girar</div>
+
+    <script>
+        const canvas = document.getElementById('raceCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 500;
+
+        // --- CONFIGURACIÓN ---
+        const trackLength = 5000;
+        const horizon = canvas.height * 0.45;
+        let gameActive = true;
+
+        const keys = { ArrowUp: false, ArrowLeft: false, ArrowRight: false };
+        window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.code)) keys[e.code] = true; });
+        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.code)) keys[e.code] = false; });
+
+        // --- OBJETOS DE COCHES ---
+        const cars = [
+            { id: 'JUGADOR (Rosa)', pos: 0, x: 0, speed: 0, maxSpeed: 12, color: '#ff00ff', accel: 0.1, isPlayer: true },
+            { id: 'BOT AZUL', pos: 0, x: -0.6, speed: 10.5, maxSpeed: 10.5, color: '#00ccff', isPlayer: false },
+            { id: 'BOT VERDE', pos: 0, x: 0.6, speed: 11, maxSpeed: 11, color: '#00ff66', isPlayer: false },
+            { id: 'BOT AMARILLO', pos: 0, x: 0.2, speed: 10.8, maxSpeed: 10.8, color: '#ffff00', isPlayer: false }
+        ];
+
+        function getLeader() {
+            return [...cars].sort((a, b) => b.pos - a.pos)[0];
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            // Lógica de movimiento Jugador
+            if (keys.ArrowUp) {
+                cars[0].speed = Math.min(cars[0].speed + cars[0].accel, cars[0].maxSpeed);
+            } else {
+                cars[0].speed = Math.max(cars[0].speed - 0.05, 0);
+            }
+
+            if (keys.ArrowLeft) cars[0].x -= 0.04;
+            if (keys.ArrowRight) cars[0].x += 0.04;
+
+            // Mantener coches en pista
+            cars[0].x = Math.max(Math.min(cars[0].x, 1), -1);
+
+            // Mover todos los coches
+            cars.forEach(car => {
+                car.pos += car.speed;
+                // Pequeña variación para bots
+                if (!car.isPlayer) {
+                    car.x += Math.sin(Date.now() * 0.001 + car.pos) * 0.01;
+                }
+            });
+
+            // Actualizar Ranking HUD
+            const ranking = [...cars].sort((a, b) => b.pos - a.pos);
+            document.getElementById('ranking').innerHTML = ranking.map((c, i) => 
+                `${i+1}. ${c.id === getLeader().id ? '⭐ ' : ''}${c.id}`
+            ).join('<br>');
+            
+            document.getElementById('speed-val').innerText = Math.floor(cars[0].pos);
+
+            // Victoria
+            if (getLeader().pos >= trackLength) {
+                gameActive = false;
+                document.getElementById('victory-screen').style.display = 'block';
+                document.getElementById('winner-text').innerText = "GANÓ: " + getLeader().id;
+            }
+        }
+
+        function draw() {
+            // Fondo: Cielo de Las Vegas
+            const grad = ctx.createLinearGradient(0, 0, 0, horizon);
+            grad.addColorStop(0, '#050010');
+            grad.addColorStop(1, '#200040');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar estrellas/luces lejanas
+            ctx.fillStyle = "#fff";
+            for(let i=0; i<30; i++) {
+                let x = (Math.sin(i) * 50000) % canvas.width;
+                let y = (Math.cos(i) * 50000) % horizon;
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            // Dibujar Pista (Perspectiva simple)
+            const leader = getLeader();
+            const playerPos = cars[0].pos;
+
+            for (let n = 0; n < canvas.height - horizon; n++) {
+                const z = n / (canvas.height - horizon); // 0 a 1
+                const width = 100 + z * 800;
+                const x = canvas.width / 2 - width / 2;
+                const y = canvas.height - n;
+
+                // Efecto de franjas de carretera en movimiento
+                const colorSeg = Math.floor((playerPos - (canvas.height - n) * 2) * 0.1) % 2;
+                ctx.fillStyle = colorSeg === 0 ? "#111" : "#1a1a1a";
+                ctx.fillRect(x, y, width, 1);
+
+                // Bordes Neón
+                ctx.fillStyle = "#00ffff";
+                ctx.fillRect(x - 5, y, 5, 1);
+                ctx.fillRect(x + width, y, 5, 1);
+            }
+
+            // Dibujar Coches
+            const sortedByPos = [...cars].sort((a, b) => a.pos - b.pos);
+            
+            sortedByPos.forEach(car => {
+                // Cálculo de distancia relativa al jugador para la cámara
+                const relativeZ = car.pos - playerPos;
+                
+                // Si el coche está en el rango visual
+                if (relativeZ > -200 && relativeZ < 2000) {
+                    const scale = 160 / (relativeZ + 200);
+                    const screenX = canvas.width / 2 + (car.x * canvas.width / 2 * scale);
+                    const screenY = canvas.height - (relativeZ * 0.2) - 50;
+                    
+                    // Si es el líder, cambia de color (Arcoíris Neón)
+                    let carColor = car.color;
+                    if (car.id === leader.id) {
+                        carColor = `hsl(${Date.now() % 360}, 100%, 60%)`;
+                    }
+
+                    drawKart(screenX, car.isPlayer ? 420 : screenY, scale * (car.isPlayer ? 100 : 80), carColor);
+                }
+            });
+        }
+
+        function drawKart(x, y, size, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Sombra/Brillo Neón
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = color;
+
+            // Cuerpo del Kart
+            ctx.fillStyle = color;
+            ctx.fillRect(-size/2, 0, size, size/3);
+            
+            // Spoiler (Alerón)
+            ctx.fillRect(-size/2, -size/4, size, size/10);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(-size/2 + 5, -size/5, size - 10, size/10);
+
+            // Ruedas
+            ctx.fillStyle = "#333";
+            ctx.fillRect(-size/2 - 5, size/10, size/5, size/4); // Izq
+            ctx.fillRect(size/2 - size/5 + 5, size/10, size/5, size/4); // Der
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>

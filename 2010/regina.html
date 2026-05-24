@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pink Neon Racer - Regi Huerta</title>
+    <style>
+        :root {
+            --pink: #ff007f;
+            --light-pink: #ff85c1;
+            --neon-blue: #00f2ff;
+            --road-grey: #1a1a1a;
+        }
+
+        body {
+            margin: 0;
+            background-color: #050505;
+            color: white;
+            font-family: 'Arial Black', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-area {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background-color: var(--road-grey);
+            border: 5px solid var(--pink);
+            border-radius: 10px;
+            box-shadow: 0 0 30px var(--pink);
+            overflow: hidden;
+        }
+
+        /* Líneas de la carretera */
+        .road-line {
+            position: absolute;
+            width: 8px;
+            height: 50px;
+            background-color: white;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0.3;
+        }
+
+        /* El Carro Jugador */
+        #player {
+            position: absolute;
+            width: 50px;
+            height: 90px;
+            background: var(--pink);
+            bottom: 20px;
+            left: 175px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px var(--pink);
+            transition: left 0.1s ease-out;
+            z-index: 10;
+        }
+
+        /* Faros y Vidrio */
+        #player::before { content: ''; position: absolute; top: 10px; left: 5px; width: 40px; height: 20px; background: #333; border-radius: 3px; }
+        #player::after { content: ''; position: absolute; bottom: 5px; left: 5px; width: 40px; height: 5px; background: red; box-shadow: 0 5px 10px red; }
+
+        /* Enemigos y Premios */
+        .enemy {
+            position: absolute;
+            width: 50px;
+            height: 90px;
+            background: var(--neon-blue);
+            border-radius: 8px;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .candy {
+            position: absolute;
+            font-size: 30px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            animation: rotate 1s linear infinite;
+        }
+
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* UI */
+        .hud {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            font-size: 1.2rem;
+            color: var(--light-pink);
+            text-shadow: 0 0 5px var(--pink);
+            z-index: 20;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        h1 { color: var(--pink); font-size: 2.5rem; margin-bottom: 10px; text-shadow: 0 0 20px var(--pink); }
+        
+        button {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: var(--pink);
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 15px var(--pink);
+        }
+
+        .signature {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: var(--light-pink);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-area">
+        <div class="hud">DULCES: <span id="score">0</span> | KM/H: <span id="kmh">0</span></div>
+        
+        <div id="player"></div>
+
+        <div id="start-screen" class="overlay">
+            <h1>PINK RACER</h1>
+            <p>Usa Flechas <b>← →</b> para moverte</p>
+            <p>Esquiva carros azules y come dulces</p>
+            <button onclick="startGame()">¡ARRANCAR!</button>
+            <div class="signature">Creado por <b>Regi Huerta</b></div>
+        </div>
+
+        <div id="end-screen" class="overlay" style="display:none">
+            <h1>¡CHOQUE!</h1>
+            <p>Dulces obtenidos: <span id="finalScore">0</span></p>
+            <button onclick="startGame()">REINTENTAR</button>
+        </div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const gameArea = document.getElementById('game-area');
+        const scoreDisplay = document.getElementById('score');
+        const kmhDisplay = document.getElementById('kmh');
+        
+        let score = 0;
+        let speed = 5;
+        let kmh = 0;
+        let gameRunning = false;
+        let playerX = 175;
+        let entities = [];
+        let lines = [];
+
+        // Crear líneas de carretera
+        for(let i=0; i<10; i++) {
+            let line = document.createElement('div');
+            line.className = 'road-line';
+            line.style.top = (i * 80) + 'px';
+            gameArea.appendChild(line);
+            lines.push(line);
+        }
+
+        function startGame() {
+            score = 0;
+            speed = 6;
+            kmh = 120;
+            playerX = 175;
+            entities.forEach(e => e.remove());
+            entities = [];
+            gameRunning = true;
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('end-screen').style.display = 'none';
+            player.style.left = playerX + 'px';
+            
+            spawnEntity();
+            update();
+        }
+
+        // Controles
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            if (e.key === 'ArrowLeft' && playerX > 50) playerX -= 60;
+            if (e.key === 'ArrowRight' && playerX < 300) playerX += 60;
+            player.style.left = playerX + 'px';
+        });
+
+        function spawnEntity() {
+            if (!gameRunning) return;
+            
+            const isCandy = Math.random() > 0.6;
+            const entity = document.createElement('div');
+            entity.className = isCandy ? 'candy' : 'enemy';
+            
+            const lanes = [65, 175, 285];
+            const laneX = lanes[Math.floor(Math.random() * 3)];
+            
+            entity.style.left = laneX + 'px';
+            entity.style.top = '-100px';
+            if(isCandy) entity.innerText = '🍬';
+            
+            entity.dataset.type = isCandy ? 'candy' : 'enemy';
+            gameArea.appendChild(entity);
+            entities.push(entity);
+
+            setTimeout(spawnEntity, Math.max(400, 1500 - (speed * 100)));
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Mover líneas carretera
+            lines.forEach(l => {
+                let top = parseFloat(l.style.top) + speed;
+                if (top > 600) top = -50;
+                l.style.top = top + 'px';
+            });
+
+            // Mover enemigos y dulces
+            entities.forEach((ent, index) => {
+                let y = parseFloat(ent.style.top) + speed;
+                ent.style.top = y + 'px';
+
+                // Colisión
+                let pRect = player.getBoundingClientRect();
+                let eRect = ent.getBoundingClientRect();
+
+                if (pRect.left < eRect.right && pRect.right > eRect.left &&
+                    pRect.top < eRect.bottom && pRect.bottom > eRect.top) {
+                    
+                    if (ent.dataset.type === 'candy') {
+                        score += 5;
+                        scoreDisplay.innerText = score;
+                        ent.remove();
+                        entities.splice(index, 1);
+                    } else {
+                        gameOver();
+                    }
+                }
+
+                if (y > 650) {
+                    ent.remove();
+                    entities.splice(index, 1);
+                }
+            });
+
+            kmh = Math.floor(speed * 30);
+            kmhDisplay.innerText = kmh;
+            speed += 0.002; // Aceleración constante
+
+            requestAnimationFrame(update);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('end-screen').style.display = 'flex';
+            document.getElementById('finalScore').innerText = score;
+        }
+    </script>
+</body>
+</html>

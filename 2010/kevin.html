@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Football Final - Kevin Emiliano</title>
+    <style>
+        :root {
+            --primary: #f1c40f;
+            --grass: #2ecc71;
+            --sky: #3498db;
+        }
+
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial Black', sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 450px;
+            border: 6px solid #fff;
+            border-radius: 12px;
+            background: linear-gradient(to bottom, var(--sky) 0%, var(--sky) 65%, var(--grass) 65%, #27ae60 100%);
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+
+        canvas { display: block; }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+            text-align: center;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .emoji-opt {
+            font-size: 2.2rem;
+            padding: 8px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            border-radius: 10px;
+            background: #333;
+            transition: 0.2s;
+        }
+
+        .emoji-opt:hover { transform: scale(1.1); }
+        .emoji-opt.selected { border-color: var(--primary); background: #555; }
+
+        select, button {
+            padding: 12px 25px;
+            font-size: 1.2rem;
+            border-radius: 25px;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        button { background: #e67e22; color: white; margin-top: 15px; box-shadow: 0 4px 0 #a04000; }
+        button:active { transform: translateY(4px); box-shadow: none; }
+
+        #hud {
+            position: absolute;
+            top: 10px; width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-size: 2.5rem;
+            text-shadow: 3px 3px 0 #000;
+            pointer-events: none;
+            color: white;
+        }
+
+        #goal-banner {
+            position: absolute;
+            top: 35%; width: 100%;
+            text-align: center;
+            font-size: 5rem;
+            color: var(--primary);
+            display: none;
+            text-shadow: 6px 6px 0 #000;
+            z-index: 50;
+        }
+
+        .controls-info { font-size: 0.8rem; margin-top: 15px; color: #ccc; }
+        .author { position: absolute; bottom: 5px; right: 10px; font-size: 11px; color: white; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="field" width="800" height="450"></canvas>
+    <div id="goal-banner">¡GOOOOOL!</div>
+
+    <div id="hud">
+        <div id="s1">0</div>
+        <div id="time">01:00</div>
+        <div id="s2">0</div>
+    </div>
+
+    <div id="menu" class="overlay">
+        <h1 style="color:var(--primary); margin:0; font-size: 3rem;">EMOJI HEADS ⚽</h1>
+        <p>Elige tu personaje:</p>
+        <div class="emoji-grid" id="selectors">
+            <div class="emoji-opt selected" onclick="pick('😎', this)">😎</div>
+            <div class="emoji-opt" onclick="pick('🔥', this)">🔥</div>
+            <div class="emoji-opt" onclick="pick('🤡', this)">🤡</div>
+            <div class="emoji-opt" onclick="pick('🦁', this)">🦁</div>
+            <div class="emoji-opt" onclick="pick('👽', this)">👽</div>
+            <div class="emoji-opt" onclick="pick('👻', this)">👻</div>
+            <div class="emoji-opt" onclick="pick('🤖', this)">🤖</div>
+            <div class="emoji-opt" onclick="pick('😈', this)">😈</div>
+        </div>
+        <div>
+            Dificultad IA: 
+            <select id="diff-lvl">
+                <option value="3.5">Fácil</option>
+                <option value="5.5" selected>Normal</option>
+                <option value="8.5">Leyenda</option>
+            </select>
+        </div>
+        <button onclick="start()">JUGAR</button>
+        <div class="controls-info">Mover: Flechas o A/D | Salto: ESPACIO o W</div>
+    </div>
+
+    <div id="end" class="overlay" style="display:none">
+        <h1 id="result">¡FIN!</h1>
+        <button onclick="location.reload()">REINTENTAR</button>
+    </div>
+
+    <div class="author">Creado por kevin emiliano vega gomez</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('field');
+    const ctx = canvas.getContext('2d');
+    const goalBanner = document.getElementById('goal-banner');
+
+    let running = false;
+    let paused = false;
+    let p1Emoji = "😎";
+    let score = { p1: 0, p2: 0 };
+    let timeLeft = 60;
+    let aiLevel = 5.5;
+
+    const gravity = 0.5;
+    const ballFriction = 0.99;
+
+    const ball = { x: 400, y: 150, r: 16, dx: 0, dy: 0, bounciness: 0.85 };
+    const p1 = { x: 120, y: 330, r: 38, dx: 0, dy: 0, emoji: "", jumping: false };
+    const p2 = { x: 680, y: 330, r: 38, dx: 0, dy: 0, emoji: "🤖", jumping: false };
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    function pick(e, el) {
+        p1Emoji = e;
+        document.querySelectorAll('.emoji-opt').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    function start() {
+        aiLevel = parseFloat(document.getElementById('diff-lvl').value);
+        p1.emoji = p1Emoji;
+        document.getElementById('menu').style.display = 'none';
+        running = true;
+        resetPositions();
+        startTimer();
+        loop();
+    }
+
+    function startTimer() {
+        setInterval(() => {
+            if (running && !paused) {
+                timeLeft--;
+                document.getElementById('time').innerText = `00:${timeLeft < 10 ? '0'+timeLeft : timeLeft}`;
+                if (timeLeft <= 0) { running = false; document.getElementById('end').style.display = 'flex'; }
+            }
+        }, 1000);
+    }
+
+    function resetPositions() {
+        paused = true;
+        ball.x = 400; ball.y = 100; ball.dx = (Math.random() - 0.5) * 8; ball.dy = 0;
+        p1.x = 120; p2.x = 680; p1.y = 330; p2.y = 330;
+        p1.dy = 0; p2.dy = 0;
+        setTimeout(() => { paused = false; goalBanner.style.display = 'none'; }, 1000);
+    }
+
+    function update() {
+        if (paused) return;
+
+        // Movimiento Horizontal P1
+        if (keys['ArrowLeft'] || keys['KeyA']) p1.dx = -7;
+        else if (keys['ArrowRight'] || keys['KeyD']) p1.dx = 7;
+        else p1.dx = 0;
+
+        // SALTO P1 (Barra espaciadora o W o Arriba)
+        if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && !p1.jumping) {
+            p1.dy = -15; // Salto potente
+            p1.jumping = true;
+        }
+
+        // Movimiento IA
+        let reactionPoint = ball.x + (ball.dx * 1.5);
+        if (p2.x < reactionPoint - 20) p2.dx = aiLevel;
+        else if (p2.x > reactionPoint + 20) p2.dx = -aiLevel;
+        else p2.dx = 0;
+
+        if (ball.y < 220 && Math.abs(ball.x - p2.x) < 50 && !p2.jumping) {
+            p2.dy = -14;
+            p2.jumping = true;
+        }
+
+        // Físicas y Colisiones con bordes del recuadro
+        [p1, p2, ball].forEach(obj => {
+            obj.dy += (obj === ball ? gravity * 0.8 : gravity);
+            obj.x += obj.dx;
+            obj.y += obj.dy;
+
+            // Suelo
+            let ground = (obj === ball) ? 410 : 330;
+            if (obj.y > ground) {
+                obj.y = ground;
+                if (obj === ball) obj.dy = -obj.dy * ball.bounciness;
+                else { obj.dy = 0; obj.jumping = false; }
+            }
+
+            // Paredes (No salir del recuadro)
+            if (obj.x < obj.r) { obj.x = obj.r; if(obj === ball) obj.dx *= -0.8; }
+            if (obj.x > 800 - obj.r) { obj.x = 800 - obj.r; if(obj === ball) obj.dx *= -0.8; }
+            
+            // Techo
+            if (obj === ball && obj.y < obj.r) { obj.y = obj.r; obj.dy *= -0.8; }
+            
+            if (obj === ball) obj.dx *= ballFriction;
+        });
+
+        // Colisión entre Cabeza y Pelota
+        [p1, p2].forEach(p => {
+            let dx = ball.x - p.x;
+            let dy = ball.y - p.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < ball.r + p.r) {
+                let angle = Math.atan2(dy, dx);
+                let power = 13; 
+                ball.dx = Math.cos(angle) * power;
+                ball.dy = Math.sin(angle) * power;
+                // Separar para evitar que se peguen
+                ball.x = p.x + Math.cos(angle) * (ball.r + p.r + 2);
+                ball.y = p.y + Math.sin(angle) * (ball.r + p.r + 2);
+            }
+        });
+
+        // Marcador Goles
+        if (ball.y > 280) {
+            if (ball.x < 35) { score.p2++; goalBanner.style.display = 'block'; resetPositions(); }
+            if (ball.x > 765) { score.p1++; goalBanner.style.display = 'block'; resetPositions(); }
+        }
+
+        document.getElementById('s1').innerText = score.p1;
+        document.getElementById('s2').innerText = score.p2;
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, 800, 450);
+
+        // Arcos
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 5;
+        ctx.strokeRect(-10, 280, 50, 150); // Arco izquierdo
+        ctx.strokeRect(760, 280, 50, 150); // Arco derecho
+
+        // Cabeza Jugadores
+        ctx.textAlign = "center";
+        ctx.font = "70px Arial";
+        ctx.fillText(p1.emoji, p1.x, p1.y + 25);
+        ctx.fillText(p2.emoji, p2.x, p2.y + 25);
+
+        // Pelota
+        ctx.font = "35px Arial";
+        ctx.fillText("⚽", ball.x, ball.y + 12);
+    }
+
+    function loop() {
+        if (!running) return;
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+</script>
+</body>
+</html>

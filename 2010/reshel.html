@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hogwarts: Camino a la Copa - Reshel Ojeda</title>
+    <style>
+        :root {
+            --hedge: #1b4d3e;
+            --path: #1a1a1a;
+            --gold: #ffd700;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Cinzel', serif;
+            color: white;
+        }
+
+        #game-viewport {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--path);
+            overflow: hidden;
+        }
+
+        /* Barra de Progreso */
+        #progress-bar {
+            position: absolute;
+            top: 0; left: 0;
+            width: 0%; height: 5px;
+            background: var(--gold);
+            z-index: 2000;
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+        /* Elementos del Laberinto */
+        .wall {
+            position: absolute;
+            background: var(--hedge);
+            border: 2px solid #0d2b22;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        /* Personajes */
+        .character {
+            position: absolute;
+            width: 35px; height: 35px;
+            border-radius: 50%;
+            z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 18px;
+        }
+        #harry { background: #740001; border: 3px solid #eeba30; }
+        #ron { background: #8b4513; border: 2px solid #eeba30; }
+        #hermione { background: #4b0082; border: 2px solid #eeba30; }
+
+        .wand {
+            position: absolute; width: 4px; height: 30px;
+            background: #4e342e; top: 50%; left: 50%;
+            transform-origin: top center; border-radius: 2px;
+        }
+
+        #cup {
+            position: absolute; font-size: 60px; z-index: 90;
+            display: none; filter: drop-shadow(0 0 20px var(--gold));
+            animation: bounce 1s infinite alternate;
+        }
+
+        @keyframes bounce { from { transform: scale(1); } to { transform: scale(1.2); } }
+
+        .spell {
+            position: absolute; width: 10px; height: 10px;
+            background: #fff; border-radius: 50%;
+            box-shadow: 0 0 15px #00ecff; z-index: 110;
+        }
+
+        .villain { position: absolute; font-size: 45px; z-index: 80; }
+
+        /* UI */
+        #hud {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0,0,0,0.8); padding: 10px;
+            border-radius: 10px; border: 1px solid var(--gold); z-index: 1000;
+        }
+
+        #screen-msg {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #000; padding: 40px;
+            border: 4px solid var(--gold); text-align: center;
+            display: none; z-index: 3000;
+        }
+
+        .signature {
+            position: absolute; bottom: 10px; right: 20px;
+            color: #bdc3c7; font-weight: bold;
+        }
+
+        button {
+            padding: 10px 20px; background: #740001; color: white;
+            border: 2px solid var(--gold); cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-viewport">
+    <div id="progress-bar"></div>
+    
+    <div id="hud">
+        <b>Avance:</b> <span id="dist">0</span>m / 1000m<br>
+        <b>Vidas:</b> <span id="lives">3</span> | <b>Puntos:</b> <span id="score">0</span>
+    </div>
+
+    <div id="harry" class="character">⚡<div class="wand" id="h-wand"></div></div>
+    <div id="ron" class="character">🐀</div>
+    <div id="hermione" class="character">📚</div>
+
+    <div id="cup">🏆</div>
+    <div id="objects-container"></div>
+
+    <div id="screen-msg">
+        <h1 id="msg-title"></h1>
+        <button onclick="location.reload()">REINTENTAR</button>
+    </div>
+
+    <div class="signature">Creado por Reshel Ojeda</div>
+</div>
+
+<script>
+    const viewport = document.getElementById('game-viewport');
+    const container = document.getElementById('objects-container');
+    const h = document.getElementById('harry'), r = document.getElementById('ron'), m = document.getElementById('hermione');
+    const wand = document.getElementById('h-wand');
+    const cup = document.getElementById('cup');
+    
+    let score = 0, lives = 3, distance = 0, active = true;
+    let pX = window.innerWidth / 2, pY = window.innerHeight - 150;
+    let rX = pX - 40, rY = pY + 40, mX = pX + 40, mY = pY + 40;
+    const keys = {};
+
+    // Audio
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    function playSnd(f, d) {
+        const o = audio.createOscillator(); const g = audio.createGain();
+        o.frequency.value = f; g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + d);
+        o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + d);
+    }
+
+    // Generar obstáculos que bajan
+    function spawnWall() {
+        if(!active || distance > 950) return;
+        const w = document.createElement('div');
+        w.className = 'wall';
+        const width = Math.random() * 200 + 100;
+        w.style.width = width + 'px';
+        w.style.height = '30px';
+        w.style.left = Math.random() * (window.innerWidth - width) + 'px';
+        w.style.top = '-50px';
+        container.appendChild(w);
+        
+        let wallPos = -50;
+        const moveWall = setInterval(() => {
+            if(!active) return clearInterval(moveWall);
+            wallPos += 3; // Velocidad de avance
+            w.style.top = wallPos + 'px';
+            
+            // Colisión con Harry
+            const hr = h.getBoundingClientRect(), wr = w.getBoundingClientRect();
+            if(hr.left < wr.right && hr.right > wr.left && hr.top < wr.bottom && hr.bottom > wr.top) {
+                pY += 5; // Empuja al jugador hacia abajo
+            }
+
+            if(wallPos > window.innerHeight) { w.remove(); clearInterval(moveWall); }
+        }, 20);
+    }
+
+    // Villanos
+    function spawnVillain() {
+        if(!active || distance > 950) return;
+        const v = document.createElement('div');
+        v.className = 'villain';
+        v.innerHTML = ["🐍", "🧛‍♀️", "👤"][Math.floor(Math.random()*3)];
+        v.style.left = Math.random() * (window.innerWidth - 50) + 'px';
+        v.style.top = '-50px';
+        container.appendChild(v);
+
+        let vY = -50;
+        const vInt = setInterval(() => {
+            if(!active) return clearInterval(vInt);
+            vY += 4;
+            v.style.top = vY + 'px';
+            
+            const hr = h.getBoundingClientRect(), vr = v.getBoundingClientRect();
+            if(hr.left < vr.right && hr.right > vr.left && hr.top < vr.bottom && hr.bottom > vr.top) {
+                lives--; document.getElementById('lives').innerText = lives;
+                playSnd(100, 0.4); v.remove(); clearInterval(vInt);
+                if(lives <= 0) endGame("HOGWARTS HA CAÍDO");
+            }
+            if(vY > window.innerHeight) { v.remove(); clearInterval(vInt); }
+        }, 20);
+    }
+
+    window.onkeydown = e => keys[e.code] = true;
+    window.onkeyup = e => keys[e.code] = false;
+
+    function gameLoop() {
+        if(!active) return;
+
+        // Movimiento Lateral y Vertical
+        if((keys['KeyA'] || keys['ArrowLeft']) && pX > 20) pX -= 6;
+        if((keys['KeyD'] || keys['ArrowRight']) && pX < window.innerWidth - 50) pX += 6;
+        if((keys['KeyW'] || keys['ArrowUp']) && pY > 50) pY -= 3;
+        if((keys['KeyS'] || keys['ArrowDown']) && pY < window.innerHeight - 100) pY += 3;
+
+        // Efecto de avance (distancia)
+        distance += 0.5;
+        document.getElementById('dist').innerText = Math.floor(distance);
+        document.getElementById('progress-bar').style.width = (distance/10) + '%';
+
+        // Ron y Hermione siguen (atrasados)
+        rX += (pX - rX - 50) * 0.1; rY += (pY - rY + 30) * 0.1;
+        mX += (pX - mX + 50) * 0.1; mY += (pY - mY + 30) * 0.1;
+
+        h.style.left = pX+'px'; h.style.top = pY+'px';
+        r.style.left = rX+'px'; r.style.top = rY+'px';
+        m.style.left = mX+'px'; m.style.top = mY+'px';
+
+        // Aparece la copa al final
+        if(distance >= 1000) {
+            cup.style.display = 'block';
+            cup.style.left = (window.innerWidth/2 - 30) + 'px';
+            cup.style.top = '100px';
+            if(h.getBoundingClientRect().top < 200) endGame("¡HAS GANADO LA COPA!");
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Disparo
+    window.onmousemove = e => {
+        const ang = Math.atan2(e.clientY - pY, e.clientX - pX);
+        wand.style.transform = `rotate(${ang + Math.PI/2}deg)`;
+    };
+
+    window.onclick = e => {
+        if(!active) return;
+        playSnd(600, 0.1);
+        const s = document.createElement('div'); s.className = 'spell';
+        s.style.left = (pX+15)+'px'; s.style.top = (pY+15)+'px';
+        viewport.appendChild(s);
+        const ang = Math.atan2(e.clientY - pY, e.clientX - pX);
+        const vx = Math.cos(ang)*15, vy = Math.sin(ang)*15;
+        const si = setInterval(() => {
+            s.style.left = (parseFloat(s.style.left)+vx)+'px';
+            s.style.top = (parseFloat(s.style.top)+vy)+'px';
+            document.querySelectorAll('.villain').forEach(v => {
+                const sr = s.getBoundingClientRect(), vr = v.getBoundingClientRect();
+                if(sr.left < vr.right && sr.right > vr.left && sr.top < vr.bottom && sr.bottom > vr.top) {
+                    score += 50; document.getElementById('score').innerText = score;
+                    v.remove(); s.remove(); clearInterval(si);
+                }
+            });
+        }, 20);
+        setTimeout(() => { if(s) s.remove(); clearInterval(si); }, 1000);
+    };
+
+    function endGame(txt) {
+        active = false;
+        document.getElementById('screen-msg').style.display = 'block';
+        document.getElementById('msg-title').innerText = txt;
+    }
+
+    setInterval(spawnWall, 1500);
+    setInterval(spawnVillain, 2000);
+    gameLoop();
+</script>
+</body>
+</html>

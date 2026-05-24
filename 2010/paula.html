@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐶 Snoopy Shop - Agenda & Juego</title>
+    <style>
+        :root {
+            --primary: #FF4757;
+            --secondary: #2F3542;
+            --accent: #1E90FF;
+            --bg: #F1F2F6;
+            --white: #FFFFFF;
+            --yellow: #E1B12C;
+        }
+
+        * { box-sizing: border-box; transition: all 0.3s ease; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* --- PANTALLAS --- */
+        .screen {
+            background: var(--white);
+            width: 380px;
+            height: 650px;
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            position: relative;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            border: 8px solid var(--secondary);
+        }
+
+        .active { display: flex; }
+
+        /* --- PANTALLA INICIO --- */
+        #start-screen {
+            background: var(--primary);
+            color: white;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .title-emoji { font-size: 80px; animation: bounce 2s infinite; }
+
+        /* --- AVATAR SNOOPY --- */
+        .snoopy-container {
+            height: 180px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            background: #e1f5fe;
+            border-radius: 20px;
+            margin-bottom: 15px;
+        }
+
+        #snoopy-sprite { font-size: 100px; position: relative; z-index: 2; }
+        #snoopy-item { font-size: 50px; position: absolute; top: 20px; right: 50px; z-index: 3; }
+
+        /* --- UI PRINCIPAL --- */
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            background: var(--secondary);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .task-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+
+        .task-item {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid var(--accent);
+            animation: slideIn 0.3s;
+        }
+
+        /* --- TIENDA --- */
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        .shop-item {
+            border: 2px solid #eee;
+            border-radius: 15px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .shop-item:hover { border-color: var(--primary); background: #fff5f5; }
+
+        /* --- BOTONES --- */
+        button {
+            padding: 12px 20px;
+            border-radius: 15px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .btn-main { background: var(--yellow); color: var(--secondary); margin-top: 10px; }
+        .btn-complete { background: #2ed573; color: white; border-radius: 50%; width: 40px; height: 40px; padding: 0; }
+        
+        /* --- ANIMACIONES --- */
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+        .celebration {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            background: var(--yellow);
+            padding: 15px;
+            border-radius: 20px;
+            z-index: 10;
+            display: none;
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .footer-credit { font-size: 10px; text-align: center; margin-top: 5px; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen" class="screen active">
+        <div class="title-emoji">🐶</div>
+        <h1>SNOOPY SHOP</h1>
+        <p>¡Organiza y compra cositas!</p>
+        <button onclick="changeScreen('main-screen')" class="btn-main">¡EMPEZAR! 🚀</button>
+        <p class="footer-credit">Creado por bec´</p>
+    </div>
+
+    <div id="main-screen" class="screen">
+        <div class="stats">
+            <span>💰 <span id="coin-count">50</span></span>
+            <span>⏱️ <span id="timer">00:00</span></span>
+        </div>
+
+        <div class="snoopy-container">
+            <div id="snoopy-item"></div>
+            <div id="snoopy-sprite">🐶</div>
+            <div id="bubble" class="celebration"></div>
+        </div>
+
+        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+            <input type="text" id="taskInput" placeholder="Nueva tarea..." style="flex:1; padding: 10px; border-radius: 10px; border: 1px solid #ddd;">
+            <button onclick="addTask()" style="background: var(--accent); color: white;">➕</button>
+        </div>
+
+        <div class="task-list" id="taskList"></div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button onclick="changeScreen('shop-screen')" style="background: var(--secondary); color: white;">🛍️ TIENDA</button>
+            <button onclick="endSession()" style="background: #ccc;">🔚 FIN</button>
+        </div>
+        <p class="footer-credit">Creado por bec´</p>
+    </div>
+
+    <div id="shop-screen" class="screen">
+        <h2 style="text-align:center">🛍️ Tienda de Snoopy</h2>
+        <div class="stats" style="background: var(--primary)">
+            <span>Tus Monedas: 💰 <span id="shop-coins">50</span></span>
+        </div>
+        <div class="shop-grid">
+            <div class="shop-item" onclick="buyItem('🎩', 20)">🎩 Gorro <br> 💰 20</div>
+            <div class="shop-item" onclick="buyItem('🕶️', 15)">🕶️ Lentes <br> 💰 15</div>
+            <div class="shop-item" onclick="buyItem('🧣', 25)">🧣 Bufanda <br> 💰 25</div>
+            <div class="shop-item" onclick="buyItem('🧸', 30)">🧸 Peluche <br> 💰 30</div>
+            <div class="shop-item" onclick="buyItem('🍦', 10)">🍦 Helado <br> 💰 10</div>
+            <div class="shop-item" onclick="buyItem('👑', 100)">👑 Corona <br> 💰 100</div>
+        </div>
+        <button onclick="changeScreen('main-screen')" class="btn-main">VOLVER 🔙</button>
+    </div>
+
+    <div id="end-screen" class="screen">
+        <div style="text-align: center; margin-top: 50px;">
+            <div style="font-size: 80px;">🏠</div>
+            <h1>¡Sesión Terminada!</h1>
+            <p>Lo hiciste increíble hoy.</p>
+            <div class="stats" style="background: var(--accent); margin: 20px 0;">
+                <span>Total Monedas: <span id="final-coins">0</span></span>
+            </div>
+            <button onclick="location.reload()" class="btn-main">REINICIAR 🔄</button>
+            <p class="footer-credit">Creado por bec´</p>
+        </div>
+    </div>
+
+    <script>
+        let coins = 50;
+        let seconds = 0;
+        let timerInterval;
+
+        // --- SONIDOS (Sintetizados) ---
+        function playSound(freq, type) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+        }
+
+        // --- NAVEGACIÓN ---
+        function changeScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            
+            if(screenId === 'main-screen' && !timerInterval) {
+                startTimer();
+            }
+            updateUI();
+        }
+
+        // --- LÓGICA DE TAREAS ---
+        function addTask() {
+            const input = document.getElementById('taskInput');
+            if (input.value.trim() === "") return;
+            if (coins < 2) {
+                alert("¡No tienes monedas para asignar tareas! 😱");
+                return;
+            }
+
+            coins -= 2;
+            playSound(200, 'sine');
+            
+            const taskList = document.getElementById('taskList');
+            const div = document.createElement('div');
+            div.className = 'task-item';
+            div.innerHTML = `
+                <span>📝 ${input.value}</span>
+                <button class="btn-complete" onclick="completeTask(this)">✔️</button>
+            `;
+            taskList.appendChild(div);
+            input.value = "";
+            updateUI();
+        }
+
+        function completeTask(btn) {
+            coins += 10;
+            playSound(600, 'triangle');
+            btn.parentElement.style.opacity = "0";
+            setTimeout(() => btn.parentElement.remove(), 300);
+            showMotivation();
+            updateUI();
+        }
+
+        // --- SNOOPY MOTIVACIÓN ---
+        function showMotivation() {
+            const frases = ["¡Wow! Eres genial 🐶", "¡Sigue así! ⭐", "¡Snoopy está orgulloso! 🐾", "¡Eres una máquina! 🔥"];
+            const bubble = document.getElementById('bubble');
+            bubble.innerText = frases[Math.floor(Math.random() * frases.length)];
+            bubble.style.display = 'block';
+            setTimeout(() => { bubble.style.display = 'none'; }, 2000);
+        }
+
+        // --- TIENDA ---
+        function buyItem(emoji, price) {
+            if (coins >= price) {
+                coins -= price;
+                document.getElementById('snoopy-item').innerText = emoji;
+                playSound(800, 'square');
+                alert("¡Snoopy se ve hermoso! 😍");
+                updateUI();
+            } else {
+                alert("¡Te faltan monedas! Sigue trabajando 💸");
+            }
+        }
+
+        // --- UTILIDADES ---
+        function updateUI() {
+            document.getElementById('coin-count').innerText = coins;
+            document.getElementById('shop-coins').innerText = coins;
+            document.getElementById('final-coins').innerText = coins;
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                seconds++;
+                let m = Math.floor(seconds / 60);
+                let s = seconds % 60;
+                document.getElementById('timer').innerText = 
+                    `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function endSession() {
+            clearInterval(timerInterval);
+            changeScreen('end-screen');
+        }
+    </script>
+</body>
+</html> 

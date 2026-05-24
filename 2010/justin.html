@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navarro - Estilo Retro Arcade</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: lime;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            border: 2px solid neonblue;
+            box-shadow: 0 0 10px neonblue;
+        }
+
+        #gameCanvas {
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            pointer-events: none;
+        }
+
+        #playerName {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            color: cyan;
+            font-weight: bold;
+        }
+
+        .neon {
+            text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+        }
+
+        #restartButton {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 2px solid lime;
+            color: lime;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 5px;
+            text-shadow: 0 0 10px lime;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="playerName" class="neon">NAVARRO</div>
+    <div id="ui">
+        <span class="neon" style="color: lime;">Puntaje:</span> <span id="score" class="neon" style="color: lime;">0</span>
+        <br>
+        <span class="neon" style="color: red;">Vidas:</span> <span id="lives" class="neon" style="color: red;">3</span>
+    </div>
+    <button id="restartButton" class="neon">Reiniciar</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const livesElement = document.getElementById('lives');
+    const restartButton = document.getElementById('restartButton');
+
+    let player, enemies, bullets, powerups, stars;
+    let score = 0;
+    let lives = 3;
+    let gameOver = false;
+    let enemySpeed = 1;
+    let currentWave = 1;
+    let enemiesRemaining;
+    let bulletSpeed = 5;
+    let shootCooldown = 0;
+    const shootCooldownMax = 15;
+
+    const keys = {};
+
+    const playerWidth = 30;
+    const playerHeight = 20;
+    const playerSpeed = 4;
+
+    const enemyWidth = 30;
+    const enemyHeight = 20;
+    const enemyColors = ['cyan', 'magenta', 'yellow', 'orange', 'red'];
+
+    const bulletWidth = 4;
+    const bulletHeight = 10;
+    const bulletColor = 'lime';
+
+    const starCount = 100;
+
+    function init() {
+        score = 0;
+        lives = 3;
+        gameOver = false;
+        enemySpeed = 1;
+        currentWave = 1;
+        enemiesRemaining = 0;
+        shootCooldown = 0;
+
+        player = {
+            x: canvas.width / 2 - playerWidth / 2,
+            y: canvas.height - playerHeight - 10,
+            width: playerWidth,
+            height: playerHeight,
+            color: 'lime',
+            bulletPower: 1,
+        };
+
+        enemies = [];
+        bullets = [];
+        powerups = [];
+        stars = [];
+
+        for (let i = 0; i < starCount; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2,
+                speed: Math.random() * 1 + 0.5
+            });
+        }
+
+        restartButton.style.display = 'none';
+
+        updateScore(0);
+        updateLives(3);
+
+        generateWave();
+    }
+
+    function updateScore(value) {
+        score = value;
+        scoreElement.textContent = score;
+    }
+
+    function updateLives(value) {
+        lives = value;
+        livesElement.textContent = lives;
+    }
+
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => {
+        keys[e.key] = false;
+        if (e.key === ' ') {
+            shoot();
+        }
+    });
+
+    restartButton.addEventListener('click', init);
+
+    function handleInput() {
+        if (gameOver) return;
+
+        if (keys['a'] || keys['ArrowLeft']) {
+            player.x -= playerSpeed;
+        }
+        if (keys['d'] || keys['ArrowRight']) {
+            player.x += playerSpeed;
+        }
+        if (keys['w'] || keys['ArrowUp']) {
+            player.y -= playerSpeed;
+        }
+        if (keys['s'] || keys['ArrowDown']) {
+            player.y += playerSpeed;
+        }
+
+        player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+        player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+    }
+
+    function shoot() {
+        if (gameOver) return;
+        if (player.bulletPower === 1) {
+            bullets.push({
+                x: player.x + player.width / 2 - bulletWidth / 2,
+                y: player.y,
+                width: bulletWidth,
+                height: bulletHeight,
+                color: bulletColor,
+                dy: -bulletSpeed
+            });
+        } else if (player.bulletPower === 2) {
+            bullets.push({
+                x: player.x + player.width / 4 - bulletWidth / 2,
+                y: player.y,
+                width: bulletWidth,
+                height: bulletHeight,
+                color: bulletColor,
+                dy: -bulletSpeed
+            });
+            bullets.push({
+                x: player.x + player.width * 3 / 4 - bulletWidth / 2,
+                y: player.y,
+                width: bulletWidth,
+                height: bulletHeight,
+                color: bulletColor,
+                dy: -bulletSpeed
+            });
+        }
+    }
+
+    function generateWave() {
+        const numEnemies = currentWave * 5;
+        enemiesRemaining = numEnemies;
+        enemySpeed = 1 + (currentWave - 1) * 0.2;
+
+        for (let i = 0; i < numEnemies; i++) {
+            const type = Math.random() < 0.5 ? 'car' : 'moto';
+            const enemy = {
+                x: Math.random() * (canvas.width - enemyWidth),
+                y: -enemyHeight - (Math.random() * 200),
+                width: enemyWidth,
+                height: enemyHeight,
+                color: enemyColors[i % enemyColors.length],
+                dy: enemySpeed,
+                type: type,
+                hasDroppedPowerup: false
+            };
+            enemies.push(enemy);
+        }
+        currentWave++;
+    }
+
+    function spawnPowerup(x, y) {
+        if (Math.random() < 0.2 && player.bulletPower < 2) {
+            powerups.push({
+                x: x,
+                y: y,
+                width: 20,
+                height: 20,
+                color: 'magenta',
+                dy: 2,
+                power: 1
+            });
+        }
+    }
+
+    function checkCollision(obj1, obj2) {
+        return (obj1.x < obj2.x + obj2.width &&
+                obj1.x + obj1.width > obj2.x &&
+                obj1.y < obj2.y + obj2.height &&
+                obj1.y + obj1.height > obj2.y);
+    }
+
+    function update() {
+        if (gameOver) return;
+
+        handleInput();
+
+        stars.forEach(star => {
+            star.y += star.speed;
+            if (star.y > canvas.height) {
+                star.y = 0;
+                star.x = Math.random() * canvas.width;
+            }
+        });
+
+        bullets.forEach((bullet, index) => {
+            bullet.y += bullet.dy;
+            if (bullet.y + bullet.height < 0) {
+                bullets.splice(index, 1);
+            }
+        });
+
+        powerups.forEach((powerup, index) => {
+            powerup.y += powerup.dy;
+            if (powerup.y > canvas.height) {
+                powerups.splice(index, 1);
+            }
+            if (checkCollision(player, powerup)) {
+                player.bulletPower = 2;
+                player.color = 'magenta';
+                powerups.splice(index, 1);
+            }
+        });
+
+        enemies.forEach((enemy, enemyIndex) => {
+            enemy.y += enemy.dy;
+
+            bullets.forEach((bullet, bulletIndex) => {
+                if (checkCollision(enemy, bullet)) {
+                    enemies.splice(enemyIndex, 1);
+                    bullets.splice(bulletIndex, 1);
+                    updateScore(score + 10);
+                    enemiesRemaining--;
+
+                    if (!enemy.hasDroppedPowerup) {
+                        spawnPowerup(enemy.x, enemy.y);
+                        enemy.hasDroppedPowerup = true;
+                    }
+
+                    if (enemiesRemaining === 0) {
+                        generateWave();
+                    }
+                }
+            });
+
+            if (checkCollision(enemy, player)) {
+                lives--;
+                updateLives(lives);
+                enemies.splice(enemyIndex, 1);
+                if (lives === 0) {
+                    endGame();
+                }
+            }
+
+            if (enemy.y > canvas.height) {
+                enemies.splice(enemyIndex, 1);
+                lives--;
+                updateLives(lives);
+                if (lives === 0) {
+                    endGame();
+                }
+            }
+        });
+    }
+
+    function draw() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        stars.forEach(star => {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(star.x, star.y, star.size, star.size);
+        });
+
+        if (gameOver) {
+            ctx.font = '50px Courier New';
+            ctx.fillStyle = 'red';
+            ctx.textAlign = 'center';
+            ctx.fillText('¡GAME OVER!', canvas.width / 2, canvas.height / 2 - 30);
+            ctx.font = '30px Courier New';
+            ctx.fillStyle = 'lime';
+            ctx.fillText('NAVARRO, Puntaje final: ' + score, canvas.width / 2, canvas.height / 2 + 20);
+            restartButton.style.display = 'block';
+            return;
+        }
+
+        drawPlayerShip(player);
+
+        bullets.forEach(bullet => drawNeonRect(bullet));
+
+        enemies.forEach(enemy => {
+            if (enemy.type === 'car') {
+                drawNeonCar(enemy);
+            } else {
+                drawNeonMoto(enemy);
+            }
+        });
+
+        powerups.forEach(powerup => drawNeonPowerup(powerup));
+    }
+
+    function drawNeonRect(obj) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = obj.color;
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+        ctx.shadowBlur = 0;
+    }
+
+    function drawPlayerShip(obj) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = obj.color;
+        ctx.fillStyle = obj.color;
+        ctx.beginPath();
+        ctx.moveTo(obj.x + obj.width / 2, obj.y); 
+        ctx.lineTo(obj.x + obj.width, obj.y + obj.height);
+        ctx.lineTo(obj.x, obj.y + obj.height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawNeonCar(obj) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = obj.color;
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(obj.x + 5, obj.y, obj.width - 10, obj.height);
+        ctx.fillRect(obj.x, obj.y + obj.height / 2, obj.width, obj.height / 2);
+        ctx.shadowBlur = 0;
+    }
+
+    function drawNeonMoto(obj) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = obj.color;
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(obj.x + 10, obj.y, obj.width - 20, obj.height);
+        ctx.beginPath();
+        ctx.arc(obj.x + 5, obj.y + obj.height / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.arc(obj.x + obj.width - 5, obj.y + obj.height / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    function drawNeonPowerup(obj) {
+        drawNeonRect({
+            ...obj,
+            width: obj.width * 0.8,
+            height: obj.height * 0.8,
+            color: obj.color
+        });
+    }
+
+    function endGame() {
+        gameOver = true;
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    init();
+    gameLoop();
+
+</script>
+
+</body>
+</html>

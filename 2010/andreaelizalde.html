@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aritochh - Edición Especial</title>
+    <style>
+        :root {
+            --pastel-pink: #ffcfdf;
+            --pastel-purple: #e0b0ff;
+            --pastel-blue: #b9e9ff;
+            --pastel-yellow: #fef9c3;
+            --gold: #d4af37;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+        }
+
+        /* Fondo de Franjas */
+        body {
+            background: linear-gradient(180deg, 
+                var(--pastel-pink) 0%, var(--pastel-pink) 25%, 
+                var(--pastel-purple) 25%, var(--pastel-purple) 50%, 
+                var(--pastel-blue) 50%, var(--pastel-blue) 75%, 
+                var(--pastel-yellow) 75%);
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 850px; height: 650px;
+            background: #3d0066; 
+            background-image: 
+                radial-gradient(white, rgba(255,255,255,.4) 2px, transparent 40px),
+                radial-gradient(var(--gold), rgba(212,175,55,.3) 1px, transparent 20px);
+            background-size: 80px 80px, 150px 150px;
+            border: 10px solid var(--gold);
+            border-radius: 40px;
+            box-shadow: 0 0 60px rgba(0,0,0,0.6);
+        }
+
+        /* Pantallas */
+        .screen {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 100; background: rgba(255, 255, 255, 0.96);
+            text-align: center; border-radius: 30px;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { color: #ff69b4; font-size: 5em; text-shadow: 3px 3px var(--gold); margin: 0; }
+        
+        .btn-main {
+            padding: 20px 50px; font-size: 1.8em;
+            background: var(--pastel-pink); border: 4px solid var(--gold);
+            border-radius: 60px; cursor: pointer; transition: 0.3s;
+            color: #d81b60; font-weight: bold;
+        }
+        .btn-main:hover { transform: scale(1.1); background: var(--pastel-yellow); }
+
+        /* Diseño de los Bolos (Nuevos) */
+        #pins-area {
+            position: absolute; top: 80px; width: 100%;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .row { display: flex; justify-content: center; margin-top: -10px; }
+
+        .bolo {
+            width: 38px; height: 95px;
+            background: radial-gradient(circle at 30% 30%, #fff, #ddd);
+            border-radius: 50% 50% 45% 45% / 25% 25% 15% 15%;
+            margin: 0 18px; position: relative;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.4);
+            transition: 0.5s ease-in;
+        }
+        /* Franjas del bolo */
+        .bolo::before {
+            content: ''; position: absolute; top: 20px; left: 0;
+            width: 100%; height: 8px; background: #ff4757;
+            border-top: 2px solid #b33939; border-bottom: 2px solid #b33939;
+        }
+
+        .bolo.hit { transform: rotate(110deg) translate(30px, 20px); opacity: 0.5; }
+
+        /* El Aro Circular */
+        #aro {
+            position: absolute; bottom: 120px; left: 50%;
+            width: 70px; height: 70px;
+            border: 12px solid;
+            border-image: conic-gradient(#ff9ff3, #feca57, #54a0ff, #00d2d3, #ff9ff3) 1;
+            border-radius: 50%; transform: translateX(-50%);
+            z-index: 50; transition: left 0.1s ease-out;
+            box-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+
+        /* Control de Lanzamiento */
+        #launch-control {
+            position: absolute; bottom: 20px; width: 100%;
+            display: flex; justify-content: center;
+        }
+
+        .btn-launch {
+            background: #ff4757; color: white; border: 4px solid white;
+            padding: 15px 60px; border-radius: 30px; font-size: 1.5em;
+            cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .btn-launch:active { transform: scale(0.95); }
+
+        /* Kitty Fin */
+        .kitty-img { width: 180px; animation: bounce 1.2s infinite ease-in-out; margin: 15px; }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-20px) scale(1.05); }
+        }
+
+        #ui {
+            position: absolute; top: 20px; width: 100%;
+            display: flex; justify-content: space-around;
+            color: white; font-size: 1.8em; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .creador { position: absolute; bottom: 10px; right: 20px; color: var(--gold); font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="start-screen" class="screen">
+        <h1>Aritochh</h1>
+        <p style="font-size: 1.5em; color: #d81b60;">¡Apunta con el mouse y lanza el aro!</p>
+        <button class="btn-main" onclick="startGame()">¡JUGAR!</button>
+        <div class="creador">Creado por andychh</div>
+    </div>
+
+    <div id="ui">
+        <span>Puntos: <b id="score">0</b></span>
+        <span>Aros: <b id="tries">5</b></span>
+    </div>
+
+    <div id="pins-area">
+        <div class="row"> <div class="bolo" id="pin-1"></div> </div>
+        <div class="row"> <div class="bolo" id="pin-2"></div> <div class="bolo" id="pin-3"></div> </div>
+        <div class="row"> <div class="bolo" id="pin-4"></div> <div class="bolo" id="pin-5"></div> <div class="bolo" id="pin-6"></div> </div>
+    </div>
+
+    <div id="aro"></div>
+
+    <div id="launch-control">
+        <button class="btn-launch" onclick="launchAro()">¡LANZAR ARO!</button>
+    </div>
+
+    <div id="game-over-screen" class="screen hidden">
+        <h1 style="font-size: 3.5em;">¡INCREÍBLE!</h1>
+        <p style="font-size: 1.5em;">Tu puntuación final es:</p>
+        <span id="final-score" style="font-weight:bold; font-size: 3em; color: #ff69b4;">0</span>
+        
+        <img src="https://i.pinimg.com/originals/f3/0e/45/f30e4539120689b940e6080516644f12.png" alt="Hello Kitty Like" class="kitty-img">
+        
+        <p><strong>¡Hello Kitty te da un LIKE!</strong></p>
+        <button class="btn-main" onclick="location.reload()" style="font-size: 1.2em;">Volver a jugar</button>
+        <div class="creador">Creado por andychh</div>
+    </div>
+</div>
+
+<script>
+    let score = 0;
+    let tries = 5;
+    let gameActive = false;
+    let isLaunching = false;
+
+    const aro = document.getElementById('aro');
+    const scoreDisplay = document.getElementById('score');
+    const triesDisplay = document.getElementById('tries');
+    const pins = document.querySelectorAll('.bolo');
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        gameActive = true;
+    }
+
+    // El aro sigue el mouse solo horizontalmente
+    window.addEventListener('mousemove', (e) => {
+        if(!gameActive || isLaunching) return;
+        const container = document.getElementById('game-container').getBoundingClientRect();
+        let x = e.clientX - container.left;
+        
+        // Mantener dentro del contenedor
+        if(x > 50 && x < 800) {
+            aro.style.left = x + 'px';
+        }
+    });
+
+    function launchAro() {
+        if (!gameActive || isLaunching || tries <= 0) return;
+
+        isLaunching = true;
+        aro.style.transition = "bottom 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.8s ease-out";
+        aro.style.bottom = "420px";
+        aro.style.transform = "translateX(-50%) scale(0.4)";
+
+        setTimeout(() => {
+            checkCollisions();
+        }, 800);
+    }
+
+    function checkCollisions() {
+        const aroRect = aro.getBoundingClientRect();
+        let hitMade = false;
+
+        pins.forEach(pin => {
+            if (!pin.classList.contains('hit')) {
+                const pinRect = pin.getBoundingClientRect();
+                
+                // Detección de colisión centrada
+                const diffX = Math.abs((aroRect.left + aroRect.width/2) - (pinRect.left + pinRect.width/2));
+                const diffY = Math.abs((aroRect.top + aroRect.height/2) - (pinRect.top + pinRect.height/2));
+
+                if (diffX < 35 && diffY < 40) {
+                    pin.classList.add('hit');
+                    score += 50; // ¡Más puntos por atinarle a estos nuevos bolos!
+                    scoreDisplay.innerText = score;
+                    hitMade = true;
+                    playApplause();
+                }
+            }
+        });
+
+        tries--;
+        triesDisplay.innerText = tries;
+
+        // Reset aro
+        setTimeout(() => {
+            aro.style.transition = "none";
+            aro.style.bottom = "120px";
+            aro.style.transform = "translateX(-50%) scale(1)";
+            isLaunching = false;
+            
+            if (tries <= 0) {
+                setTimeout(endGame, 600);
+            }
+        }, 1000);
+    }
+
+    function endGame() {
+        gameActive = false;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        document.getElementById('final-score').innerText = score;
+    }
+
+    function playApplause() {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Sonido de "Éxito"
+        const notes = [440, 554, 659, 880]; // Acorde mayor
+        notes.forEach((freq, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime + (i * 0.1));
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime + (i * 0.1));
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + (i * 0.1) + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(audioCtx.currentTime + (i * 0.1));
+            osc.stop(audioCtx.currentTime + (i * 0.1) + 0.3);
+        });
+    }
+</script>
+
+</body>
+</html>

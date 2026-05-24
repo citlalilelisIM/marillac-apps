@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forest Survivor 360 - Aldair (Lento)</title>
+    <style>
+        :root {
+            --forest-base: #0a0f0a;
+            --zombie: #2d3d2d;
+            --ui-gold: #c5a059;
+        }
+
+        body {
+            margin: 0;
+            background-color: #000;
+            color: white;
+            font-family: 'Verdana', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1000px;
+            height: 600px;
+            background: var(--forest-base);
+            border: 2px solid #333;
+            overflow: hidden;
+            box-shadow: 0 0 100px rgba(0,0,0,1) inset;
+        }
+
+        canvas { display: block; }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        .stat-card {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border: 1px solid var(--ui-gold);
+            font-size: 1.1rem;
+            color: var(--ui-gold);
+            letter-spacing: 2px;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            text-align: center;
+        }
+
+        h1 { font-size: 3.5rem; color: #fff; margin: 0; letter-spacing: 10px; }
+        .creator { color: var(--ui-gold); margin-bottom: 30px; font-size: 0.8rem; }
+
+        .btn {
+            background: transparent;
+            color: white;
+            border: 1px solid var(--ui-gold);
+            padding: 15px 50px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: 0.3s;
+        }
+
+        .btn:hover { background: var(--ui-gold); color: black; }
+
+        #flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.15);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="flash"></div>
+    <div class="hud">
+        <div class="stat-card">SALUD: <span id="health">100</span>%</div>
+        <div class="stat-card">BAJAS: <span id="score">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="start-screen" class="overlay">
+        <h1>BOSQUE NOCTURNO</h1>
+        <p class="creator">Creado por Aldair</p>
+        <p>Gira con A/D o Flechas. Dispara con ESPACIO.<br>Los zombies se mueven lento. Mantén la calma.</p>
+        <button class="btn" onclick="startGame()">COMENZAR</button>
+    </div>
+
+    <div id="end-screen" class="overlay hidden">
+        <h1>CAÍDO EN COMBATE</h1>
+        <p id="final-score" style="font-size: 1.5rem; margin: 20px 0; color: var(--ui-gold);"></p>
+        <button class="btn" onclick="location.reload()">REINTENTAR</button>
+        <p class="creator" style="margin-top:20px">Creado por Aldair</p>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const flash = document.getElementById('flash');
+    canvas.width = 1000;
+    canvas.height = 600;
+
+    let gameActive = false;
+    let score = 0;
+    let health = 100;
+    let cameraAngle = 0; 
+    let zombies = [];
+    let trees = [];
+    let keys = {};
+
+    // Generar bosque 360
+    for(let i=0; i<50; i++) {
+        trees.push({
+            angle: Math.random() * Math.PI * 2,
+            dist: 1 + Math.random() * 5,
+            w: 15 + Math.random() * 25
+        });
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSfx(f, t, d, v) {
+        try {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = t; o.frequency.value = f;
+            g.gain.value = v; o.connect(g); g.connect(audioCtx.destination);
+            o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+            o.stop(audioCtx.currentTime + d);
+        } catch(e) {}
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        gameActive = true;
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        loop();
+    }
+
+    function endGame() {
+        gameActive = false;
+        document.getElementById('end-screen').classList.remove('hidden');
+        document.getElementById('final-score').innerText = `Eliminaste a ${score} zombies antes de caer.`;
+    }
+
+    window.onkeydown = e => {
+        keys[e.code] = true;
+        if(e.code === 'Space' && gameActive) shoot();
+    };
+    window.onkeyup = e => keys[e.code] = false;
+
+    function shoot() {
+        playSfx(100, 'sawtooth', 0.1, 0.15);
+        flash.style.opacity = "1";
+        setTimeout(() => flash.style.opacity = "0", 50);
+
+        zombies.forEach((z, i) => {
+            let rel = z.angle - cameraAngle;
+            while (rel > Math.PI) rel -= Math.PI * 2;
+            while (rel < -Math.PI) rel += Math.PI * 2;
+
+            // Rango de acierto generoso
+            if(Math.abs(rel) < 0.18 && z.dist < 5.5) {
+                score++;
+                document.getElementById('score').innerText = score;
+                playSfx(50, 'square', 0.2, 0.2);
+                zombies.splice(i, 1);
+            }
+        });
+    }
+
+    function update() {
+        if(keys['ArrowLeft'] || keys['KeyA']) cameraAngle -= 0.035;
+        if(keys['ArrowRight'] || keys['KeyD']) cameraAngle += 0.035;
+
+        // Aparición lenta de zombies
+        if(Math.random() < 0.015) { 
+            zombies.push({
+                angle: Math.random() * Math.PI * 2,
+                dist: 6,
+                speed: 0.004 + (Math.random() * 0.004) // ZOMBIES MUCHO MÁS LENTOS
+            });
+        }
+
+        zombies.forEach((z, i) => {
+            z.dist -= z.speed;
+            if(z.dist < 0.6) {
+                health -= 0.3; // Daño lento
+                document.getElementById('health').innerText = Math.floor(health);
+                if(health <= 0) endGame();
+            }
+        });
+    }
+
+    function draw() {
+        // Cielo y suelo (Visión más clara)
+        ctx.fillStyle = '#0a120a';
+        ctx.fillRect(0, 0, canvas.width, 300);
+        ctx.fillStyle = '#1e241e';
+        ctx.fillRect(0, 300, canvas.width, 300);
+
+        // Árboles
+        trees.forEach(t => {
+            let p = 1 / t.dist;
+            let rel = t.angle - cameraAngle;
+            while (rel > Math.PI) rel -= Math.PI * 2;
+            while (rel < -Math.PI) rel += Math.PI * 2;
+
+            if(Math.abs(rel) < 1.5) {
+                let x = 500 + rel * 800;
+                let w = t.w * p;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(x - w/2, 0, w, 600);
+            }
+        });
+
+        // Zombies
+        zombies.forEach(z => {
+            let p = 1 / z.dist;
+            let rel = z.angle - cameraAngle;
+            while (rel > Math.PI) rel -= Math.PI * 2;
+            while (rel < -Math.PI) rel += Math.PI * 2;
+
+            if(Math.abs(rel) < 1.2) {
+                let x = 500 + rel * 800;
+                let size = p * 160;
+                let y = 300 + (p * 40);
+
+                // Cuerpo
+                ctx.fillStyle = `rgba(15, 30, 15, ${Math.min(p, 1)})`;
+                ctx.fillRect(x - size/4, y - size, size/2, size);
+                
+                // Ojos brillantes neón
+                ctx.fillStyle = "#bfff00";
+                ctx.shadowBlur = 10; ctx.shadowColor = "#bfff00";
+                ctx.fillRect(x - size/10, y - size + size/5, 5, 5);
+                ctx.fillRect(x + size/10, y - size + size/5, 5, 5);
+                ctx.shadowBlur = 0;
+            }
+        });
+
+        // Mira Blanca (Mejor visibilidad)
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(500, 300, 20, 0, Math.PI*2);
+        ctx.moveTo(500, 285); ctx.lineTo(500, 315);
+        ctx.moveTo(485, 300); ctx.lineTo(515, 300);
+        ctx.stroke();
+
+        drawWeapon();
+    }
+
+    function drawWeapon() {
+        ctx.save();
+        ctx.translate(750, 600);
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fillRect(-50, -220, 100, 220); // Base
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-25, -400, 50, 180); // Cañón
+        ctx.restore();
+    }
+
+    function loop() {
+        if(!gameActive) return;
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+</script>
+</body>
+</html>

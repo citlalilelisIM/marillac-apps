@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isr - Juego de la Ranita</title>
+    <style>
+        :root {
+            --fondo: #ffd1dc; /* Rosa pastel */
+            --rana: #b4eeb4;  /* Verde pastel */
+            --lengua: #ff9aa2; /* Rosado fuerte pastel */
+            --bicho: #c5a3ff;  /* Morado pastel */
+            --texto: #6d597a;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--fondo);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: var(--texto);
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        /* UI */
+        .hud {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-weight: bold;
+            font-size: 1.2rem;
+            z-index: 10;
+        }
+
+        .level-up {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            color: white;
+            text-shadow: 2px 2px var(--texto);
+            display: none;
+            animation: pop 0.5s ease;
+        }
+
+        /* La Ranita */
+        #frog {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 60px;
+            background-color: var(--rana);
+            border-radius: 50% 50% 40% 40%;
+            transition: transform 0.1s;
+        }
+
+        #frog::before, #frog::after { /* Ojos */
+            content: '';
+            position: absolute;
+            top: -10px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+        }
+        #frog::before { left: 15px; }
+        #frog::after { right: 15px; }
+
+        /* La Lengua */
+        #tongue {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            width: 8px;
+            height: 0;
+            background-color: var(--lengua);
+            transform: translateX(-50%);
+            border-radius: 5px;
+            z-index: 5;
+        }
+
+        /* Los Bichos */
+        .bug {
+            position: absolute;
+            width: 25px;
+            height: 15px;
+            background-color: var(--bicho);
+            border-radius: 50%;
+            animation: hover 0.3s infinite alternate;
+        }
+
+        /* Créditos y Título */
+        .footer {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
+        h1#title {
+            position: absolute;
+            top: -10px;
+            width: 100%;
+            text-align: center;
+            font-size: 3rem;
+            opacity: 0.2;
+            margin: 0;
+        }
+
+        /* Animaciones */
+        @keyframes hover {
+            from { transform: translateY(0); }
+            to { transform: translateY(-5px); }
+        }
+
+        @keyframes pop {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            80% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* Pantalla Final */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            display: none;
+        }
+
+        button {
+            padding: 10px 25px;
+            border: none;
+            background: var(--bicho);
+            color: white;
+            border-radius: 50px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 id="title">ISR</h1>
+
+    <div id="game-container">
+        <div class="hud">
+            <div>Puntos: <span id="score">0</span></div>
+            <div>Tiempo: <span id="timer">30</span>s</div>
+            <div>Nivel: <span id="level">1</span></div>
+        </div>
+
+        <div id="level-alert" class="level-up">¡NIVEL UP!</div>
+
+        <div id="tongue"></div>
+        <div id="frog"></div>
+
+        <div id="overlay">
+            <h2>¡Tiempo agotado!</h2>
+            <p>Puntaje final: <span id="final-score">0</span></p>
+            <button onclick="resetGame()">Jugar de nuevo</button>
+        </div>
+
+        <div class="footer">
+            Creado por itzel sanchez
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const tongue = document.getElementById('tongue');
+        const frog = document.getElementById('frog');
+        const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const levelEl = document.getElementById('level');
+        const overlay = document.getElementById('overlay');
+        const levelAlert = document.getElementById('level-alert');
+
+        let score = 0;
+        let timeLeft = 30;
+        let level = 1;
+        let isAttacking = false;
+        let gameActive = true;
+        let bugs = [];
+        let speedMultiplier = 1;
+
+        // Crear bichos
+        function createBug() {
+            if (!gameActive) return;
+            const bug = document.createElement('div');
+            bug.className = 'bug';
+            
+            // Posición inicial aleatoria
+            let x = Math.random() * (container.offsetWidth - 30);
+            let y = Math.random() * (container.offsetHeight / 2);
+            let dir = Math.random() > 0.5 ? 1 : -1;
+
+            bug.style.left = x + 'px';
+            bug.style.top = y + 'px';
+            container.appendChild(bug);
+
+            const bugObj = {
+                el: bug,
+                x: x,
+                y: y,
+                vx: (Math.random() * 2 + 1) * dir * speedMultiplier,
+                vy: (Math.random() * 1 - 0.5) * speedMultiplier
+            };
+            bugs.push(bugObj);
+        }
+
+        // Mover bichos
+        function updateBugs() {
+            bugs.forEach((bug, index) => {
+                bug.x += bug.vx;
+                bug.y += bug.vy;
+
+                // Rebotar en paredes
+                if (bug.x <= 0 || bug.x >= container.offsetWidth - 25) bug.vx *= -1;
+                if (bug.y <= 50 || bug.y >= container.offsetHeight / 1.5) bug.vy *= -1;
+
+                bug.el.style.left = bug.x + 'px';
+                bug.el.style.top = bug.y + 'px';
+            });
+            if (gameActive) requestAnimationFrame(updateBugs);
+        }
+
+        // Acción de la lengua
+        container.addEventListener('mousedown', (e) => {
+            if (isAttacking || !gameActive) return;
+            isAttacking = true;
+
+            const rect = container.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Calcular distancia y ángulo
+            const frogX = container.offsetWidth / 2;
+            const frogY = container.offsetHeight - 60;
+            
+            const dist = Math.sqrt(Math.pow(clickX - frogX, 2) + Math.pow(clickY - frogY, 2));
+            const angle = Math.atan2(clickY - frogY, clickX - frogX);
+
+            // Animación de lengua
+            tongue.style.transition = 'height 0.2s ease-out';
+            tongue.style.height = dist + 'px';
+            tongue.style.transform = `translateX(-50%) rotate(${angle + Math.PI/2}rad)`;
+
+            // Detectar colisión en el punto máximo
+            setTimeout(() => {
+                checkCatch(clickX, clickY);
+                tongue.style.transition = 'height 0.3s ease-in';
+                tongue.style.height = '0';
+                setTimeout(() => { isAttacking = false; }, 300);
+            }, 200);
+        });
+
+        function checkCatch(tx, ty) {
+            bugs.forEach((bug, index) => {
+                const bx = bug.x + 12;
+                const by = bug.y + 7;
+                const distance = Math.sqrt(Math.pow(tx - bx, 2) + Math.pow(ty - by, 2));
+
+                if (distance < 30) { // Margen de captura
+                    bug.el.remove();
+                    bugs.splice(index, 1);
+                    updateScore();
+                    createBug(); // Reponer bicho
+                }
+            });
+        }
+
+        function updateScore() {
+            score++;
+            scoreEl.textContent = score;
+            if (score % 5 === 0) {
+                level++;
+                levelEl.textContent = level;
+                speedMultiplier += 0.5;
+                showLevelAlert();
+            }
+        }
+
+        function showLevelAlert() {
+            levelAlert.style.display = 'block';
+            setTimeout(() => { levelAlert.style.display = 'none'; }, 1000);
+        }
+
+        // Temporizador
+        const countdown = setInterval(() => {
+            if (!gameActive) return;
+            timeLeft--;
+            timerEl.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }, 1000);
+
+        function endGame() {
+            gameActive = false;
+            document.getElementById('final-score').textContent = score;
+            overlay.style.display = 'flex';
+            clearInterval(countdown);
+        }
+
+        function resetGame() {
+            location.reload();
+        }
+
+        // Inicializar
+        for(let i=0; i<4; i++) createBug();
+        updateBugs();
+
+    </script>
+</body>
+</html>
